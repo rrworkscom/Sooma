@@ -11,8 +11,8 @@ require __DIR__ . '/includes/header.php';
 <main class="auth-layout">
     <section class="visual-panel" aria-label="Sooma Wellness introduction">
         <a class="brand" href="index.php?page=login" aria-label="Sooma Wellness home">
-            <span class="brand-name">Sooma</span>
-            <span class="brand-subtitle">W E L L N E S S</span>
+            <span class="brand-name"></span>
+            <span class="brand-subtitle"></span>
         </a>
 
         <div class="visual-copy">
