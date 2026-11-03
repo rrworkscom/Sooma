@@ -19,6 +19,8 @@ $pageTitle = 'Sooma Wellness';
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Homepage — Sooma Wellness</title>
+
 
     <title><?= htmlspecialchars($pageTitle) ?> | Thoughtful Movement for Body &amp; Soul</title>
 
