@@ -19,43 +19,21 @@ $pageTitle = 'Sooma Wellness';
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Homepage — Sooma Wellness</title>
+
 
     <title><?= htmlspecialchars($pageTitle) ?> | Thoughtful Movement for Body &amp; Soul</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
-
+        <link rel="stylesheet" href="../assets/css/footer.css">
+    <link rel="stylesheet" href="../assets/css/header.css">
     <link rel="stylesheet" href="../assets/css/homepage.css">
 </head>
 
 <body>
-
-    <header class="site-header">
-        <a class="brand brand-light" href="#home" aria-label="Sooma Wellness home">
-            <img src="../assets/images/sooma-logo-white.png" alt="Sooma Wellness">
-        </a>
-
-        <button class="nav-toggle" aria-label="Open navigation" aria-expanded="false">
-            <span></span>
-            <span></span>
-            <span></span>
-        </button>
-
-        <nav class="main-nav" aria-label="Main navigation">
-            <a href="#home" class="active">Home</a>
-            <a href="#about">About Us</a>
-            <a href="#classes">Class</a>
-            <a href="#offers">Packages</a>
-            <a href="#timetable">Timetable</a>
-            <a href="#contact">Contact Us</a>
-        </nav>
-
-        <a class="profile-link" id="profile-link" href="profile.php" aria-label="Customer profile">
-            <img src="https://i.pinimg.com/736x/ad/25/f5/ad25f5146c840b01509b125c4e0009b8.jpg" alt="Customer profile">
-        </a>
-    </header>
-
+            <?php require_once '../includes/header.php'; ?>
     <main>
 
         <section class="hero" id="home">
@@ -359,53 +337,7 @@ $pageTitle = 'Sooma Wellness';
 
     </main>
 
-    <footer class="site-footer">
-        <div class="footer-main">
-
-            <div class="footer-brand">
-                <a class="brand footer-logo" href="#home">
-                    <img src="../assets/images/sooma-logo-white.png" alt="Sooma Wellness">
-                </a>
-
-                <p>
-                    <strong>Location</strong><br>
-                    Jl. Ciliwung No.62, Blitar
-                </p>
-
-                <p>
-                    <strong>Operating Hours</strong><br>
-                    Tue - Fri: 8.00 AM - 8.00 PM<br>
-                    Sat - Sun: 9.00 AM - 6.00 PM
-                </p>
-            </div>
-
-            <div class="footer-links">
-                <h3>Quick Link</h3>
-                <a href="#home">Home</a>
-                <a href="#about">About Us</a>
-                <a href="#classes">Class</a>
-                <a href="#offers">Package</a>
-                <a href="#timetable">Timetable</a>
-            </div>
-
-            <div class="footer-cta">
-                <h3>Ready To Start?</h3>
-                <p>Join our community and transform your body and mind into a healthy self.</p>
-                <a class="button button-light" href="#contact">Book Your Class</a>
-            </div>
-
-        </div>
-
-        <div class="footer-bottom">
-            <span>© 2026 Sooma Wellness. All rights reserved.</span>
-
-            <div>
-                <a href="#privacy">Privacy Policy</a>
-                <a href="#terms">Terms of Service</a>
-                <a href="#cookies">Cookie Settings</a>
-            </div>
-        </div>
-    </footer>
+     <?php require_once '../includes/footer.php'; ?>
 
     <script src="../assets/js/homepage.js"></script>
 
