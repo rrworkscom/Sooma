@@ -24,7 +24,7 @@ if (isset($basePath)) {
 }
 
 $menus = [
-    'home'       => 'Home',
+    'homepage'   => 'Home',
     'about-us'   => 'About Us',
     'class'      => 'Class',
     'packages'   => 'Packages',
@@ -126,7 +126,7 @@ $isAuthPage = (strpos($_SERVER['REQUEST_URI'], 'login') !== false || strpos($_SE
                 </nav>
 
                 <a class="site-header__avatar" href="profile.php" aria-label="My profile">
-                     <img src="/assets/images/profile.jpg" alt="Customer Profile">
+                     <img src="https://i.pinimg.com/736x/ad/25/f5/ad25f5146c840b01509b125c4e0009b8.jpg" alt="Customer Profile">
                 </a>
             </header>
 
