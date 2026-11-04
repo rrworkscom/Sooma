@@ -1,48 +1,36 @@
-/* =========================================================
-   Sooma Wellness — About Us
-   Source: Figma node 17:107 (1440px desktop frame)
-   ========================================================= */
-
-/* ---------- 1. Design tokens ---------- */
 :root {
-  /* Colors */
-  --color-sage: #a3b2a1;                         /* page background, accents */
-  --color-sage-overlay: rgba(163, 178, 161, .15); /* tint over photos */
-  --color-sage-glass: rgba(163, 178, 161, .81);   /* footer button fill */
-  --color-cream: #f6f4ee;                         /* cards, panels */
-  --color-cream-glass: rgba(246, 244, 238, .87);  /* footer overlay */
-  --color-brown: #3e322b;                         /* dark taupe typography */
+  --color-sage: #a3b2a1;                         
+  --color-sage-overlay: rgba(163, 178, 161, .15); 
+  --color-sage-glass: rgba(163, 178, 161, .81);  
+  --color-cream: #f6f4ee;                         
+  --color-cream-glass: rgba(246, 244, 238, .87);  
+  --color-brown: #3e322b;                         
   --color-brown-line: rgba(62, 50, 43, .45);
   --color-brown-border: rgba(62, 50, 43, .49);
   --color-white: #fff;
   --color-black: #000;
 
-  /* Typography */
   --font-serif: "Caladea", Georgia, "Times New Roman", serif;
   --font-sans: "Montserrat", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-nav: "Montserrat Alternates", "Montserrat", system-ui, sans-serif;
 
-  /* Radii */
-  --radius-xs: 12px;   /* buttons, core value cards */
-  --radius-sm: 18px;   /* footer */
-  --radius-md: 20px;   /* coaches panel */
-  --radius-photo: 25px;/* coach photo, "See more" */
-  --radius-lg: 28px;   /* story / vision images */
-  --radius-xl: 50px;   /* service cards, header corners */
+  --radius-xs: 12px;   
+  --radius-sm: 18px;   
+  --radius-md: 20px;   
+  --radius-photo: 25px;
+  --radius-lg: 28px;  
+  --radius-xl: 50px;   
 
-  /* Layout */
   --container: 1250px;
   --container-wide: 1356px;
   --gutter: clamp(16px, 4vw, 48px);
   --space-section: clamp(64px, 10vw, 144px);
 
-  /* Effects */
   --shadow-text: 2px 2px 2px rgba(0, 0, 0, .25);
   --shadow-btn: 0 2px 2px 0 var(--color-black);
   --ease: .3s ease;
 }
 
-/* ---------- 2. Base ---------- */
 *, *::before, *::after { box-sizing: border-box; }
 
 html { -webkit-text-size-adjust: 100%; }
@@ -67,7 +55,6 @@ em { font-style: italic; }
   outline-offset: 3px;
 }
 
-/* ---------- 3. Shared components ---------- */
 .container {
   width: min(100% - 2 * var(--gutter), var(--container));
   margin-inline: auto;
@@ -76,7 +63,6 @@ em { font-style: italic; }
 
 .section { padding-top: var(--space-section); }
 
-/* Section heading: Caladea Bold title + Montserrat Regular subtitle */
 .section-head h2 {
   font-family: var(--font-serif);
   font-weight: 700;
@@ -88,7 +74,6 @@ em { font-style: italic; }
 }
 .section-head--center { text-align: center; margin-inline: auto; }
 
-/* Image frame with Figma's 15% sage tint */
 .frame {
   position: relative;
   overflow: hidden;
@@ -102,8 +87,6 @@ em { font-style: italic; }
   pointer-events: none;
 }
 .frame img { width: 100%; height: 100%; object-fit: cover; }
-
-/* Logo (cropped from Figma sprite) */
 .logo {
   position: relative;
   display: block;
@@ -123,7 +106,6 @@ em { font-style: italic; }
 .logo--story  { --logo-w: 249px; }
 .logo--footer { --logo-w: 256px; }
 
-/* Buttons */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -138,7 +120,6 @@ em { font-style: italic; }
 .btn:hover { transform: translateY(-2px); }
 .btn:active { transform: translateY(0); }
 
-/* "Book Now" — hero */
 .btn--outline {
   height: 64px;
   padding: 10px 50px;
@@ -153,7 +134,6 @@ em { font-style: italic; }
   box-shadow: 0 8px 14px rgba(0, 0, 0, .35);
 }
 
-/* "See more" */
 .btn--light {
   min-width: 213px;
   height: 63px;
@@ -170,7 +150,6 @@ em { font-style: italic; }
 .btn__arrow { transition: transform var(--ease); }
 .btn--light:hover .btn__arrow { transform: translate(3px, -3px); }
 
-/* "Book Class Now" — footer */
 .btn--sage {
   height: 41px;
   min-width: 168px;
@@ -186,7 +165,6 @@ em { font-style: italic; }
   box-shadow: 0 6px 14px rgba(62, 50, 43, .25);
 }
 
-/* ---------- 4. Hero + header ---------- */
 .hero {
   position: relative;
   display: flex;
@@ -258,7 +236,6 @@ em { font-style: italic; }
 .story__media { aspect-ratio: 568 / 976; }
 .story__media img { object-position: 0 0; }
 
-/* ---------- 6. Stats & Vision ---------- */
 .vision { padding-top: clamp(80px, 11vw, 160px); }
 
 .vision__grid {
@@ -287,7 +264,7 @@ em { font-style: italic; }
 }
 .stats__item {
   display: flex;
-  flex-direction: column-reverse; /* value above label (dt/dd order kept semantic) */
+  flex-direction: column-reverse; 
   gap: 0;
 }
 .stats__item:first-child {
@@ -311,7 +288,6 @@ em { font-style: italic; }
   line-height: 50px;
 }
 
-/* ---------- 7. Services ---------- */
 .services { padding-top: clamp(80px, 10vw, 144px); }
 
 .services__head { max-width: 640px; }
@@ -319,7 +295,7 @@ em { font-style: italic; }
 
 .services__grid {
   display: grid;
-  grid-template-columns: 1fr; /* Figma: 4 full-width banners, stacked */
+  grid-template-columns: 1fr; 
   gap: 45px;
   margin-top: 45px;
 }
@@ -334,7 +310,7 @@ em { font-style: italic; }
   border-radius: var(--radius-xl);
   transition: box-shadow var(--ease), transform var(--ease);
 }
-.service-card::after { /* sage tint */
+.service-card::after { 
   content: "";
   position: absolute;
   inset: 0;
@@ -374,7 +350,7 @@ em { font-style: italic; }
 
 .services__more { display: flex; width: fit-content; margin: 45px auto 0; }
 
-/* ---------- 8. Core values ---------- */
+
 .values { padding-top: clamp(80px, 13.9vw, 200px); }
 .values__head { max-width: 698px; }
 
@@ -426,7 +402,6 @@ em { font-style: italic; }
   text-align: center;
 }
 
-/* ---------- 9. Coaches ---------- */
 .coaches { padding-top: clamp(64px, 10.9vw, 157px); }
 .coaches__head { max-width: 975px; }
 .coaches__head h2 { max-width: 698px; margin-inline: auto; }
@@ -468,7 +443,6 @@ em { font-style: italic; }
 .coach-card__link:focus-visible .coach-card__photo img { transform: scale(1.06); filter: brightness(1.04); }
 .coach-card__link:hover .coach-card__name { color: var(--color-brown); }
 
-/* ---------- 10. Experience ---------- */
 .experience { padding-top: 11px; padding-bottom: 0; }
 .experience__grid {
   display: grid;
@@ -490,7 +464,6 @@ em { font-style: italic; }
   font-size: clamp(20px, 2.43vw, 25px);
 }
 
-/* ---------- 12. Responsive ---------- */
 @media (max-width: 1100px) {
   .values__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .coaches__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

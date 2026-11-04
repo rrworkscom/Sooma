@@ -1,27 +1,16 @@
 <?php
 
 declare(strict_types=1);
-
-/* =========================================================
-   Sooma Wellness — About Us
-   Source: Figma node 17:107 (UI - About Us, 1440px frame)
-   ========================================================= */
-
-/* ---------- Helpers ---------- */
-
-/** Escape output HTML untuk keamanan XSS */
 function e(?string $value): string
 {
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 }
 
-/** Escape text, lalu ubah *teks* menjadi <em>teks</em> untuk aksen font italic khas Figma. */
 function em_text(string $text): string
 {
     return preg_replace('/\*(.+?)\*/u', '<em>$1</em>', e($text));
 }
 
-/** Render logo Sooma dengan crop CSS persis spesifikasi Figma. */
 function logo(string $file_path, array $crop, string $modifier = ''): string
 {
     $style = sprintf('--h:%s;--l:%s;--t:%s;--w:%s', $crop['h'], $crop['l'], $crop['t'], $crop['w']);
@@ -33,7 +22,6 @@ function logo(string $file_path, array $crop, string $modifier = ''): string
     );
 }
 
-/* ---------- Page Meta ---------- */
 
 $page = [
     'title'       => 'About Us — Sooma Wellness',
@@ -299,7 +287,6 @@ $experience = [
             </div>
         </section>
 
-        <!-- ======================= EXPERIENCE ======================= -->
         <section class="section experience" aria-labelledby="experience-title">
             <div class="container experience__grid">
                 <img class="experience__icon" src="<?= e($experience['icon']) ?>" alt="" loading="lazy">
