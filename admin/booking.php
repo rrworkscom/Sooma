@@ -17,7 +17,8 @@ require_once __DIR__ . '/../includes/header.php';
                 <button
                     class="round-button"
                     id="previousWeek"
-                    aria-label="Previous week">
+                    aria-label="Previous week"
+                    type="button">
                     &lt;
                 </button>
 
@@ -26,12 +27,12 @@ require_once __DIR__ . '/../includes/header.php';
                 <button
                     class="round-button"
                     id="nextWeek"
-                    aria-label="Next week">
+                    aria-label="Next week"
+                    type="button">
                     &gt;
                 </button>
             </div>
         </div>
-
     </section>
 
     <section class="calendar-shell" aria-label="Weekly schedule calendar">
@@ -53,7 +54,9 @@ require_once __DIR__ . '/../includes/header.php';
     <div class="admin-footer-main">
         <div class="footer-brand-section">
             <a class="footer-logo" href="../index.php">
-                <img src="../assets/images/sooma-logo-black.png" alt="Sooma Wellness">
+                <img
+                    src="../assets/images/sooma-logo-black.png"
+                    alt="Sooma Wellness">
             </a>
 
             <div class="footer-info">
@@ -90,12 +93,33 @@ require_once __DIR__ . '/../includes/header.php';
 </footer>
 
 <div class="modal-backdrop" id="scheduleModal" hidden>
-    <section class="schedule-modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
-        <button class="modal-close" id="closeScheduleModal" aria-label="Close"> &times; </button>
+    <section
+        class="schedule-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modalTitle">
+
+        <button
+            class="modal-close"
+            id="closeScheduleModal"
+            type="button"
+            aria-label="Close">
+            &times;
+        </button>
+
         <h2 id="modalTitle">Add New Schedule</h2>
         <p class="modal-date" id="modalDate"></p>
 
-        <form id="scheduleForm">
+        <form
+            id="scheduleForm"
+            action="booking-schedule.php"
+            method="POST">
+
+            <input
+                type="hidden"
+                name="scheduleDate"
+                id="scheduleDate">
+
             <label class="form-field">
                 <span>Class Name</span>
                 <select name="className" required>
@@ -137,12 +161,20 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="form-field-row">
                 <label class="form-field">
                     <span>Start Time</span>
-                    <input name="startTime" type="time" value="10:00" required>
+                    <input
+                        name="startTime"
+                        type="time"
+                        value="10:00"
+                        required>
                 </label>
 
                 <label class="form-field">
                     <span>End Time</span>
-                    <input name="endTime" type="time" value="11:00" required>
+                    <input
+                        name="endTime"
+                        type="time"
+                        value="11:00"
+                        required>
                 </label>
             </div>
 
@@ -169,8 +201,16 @@ require_once __DIR__ . '/../includes/header.php';
             <p class="form-error" id="formError" role="alert" hidden></p>
 
             <div class="modal-actions">
-                <button class="cancel-button" id="cancelSchedule" type="button">Cancel</button>
-                <button class="save-button" type="submit">Save</button>
+                <button
+                    class="cancel-button"
+                    id="cancelSchedule"
+                    type="button">
+                    Cancel
+                </button>
+
+                <button class="save-button" type="submit">
+                    Save
+                </button>
             </div>
         </form>
     </section>
@@ -178,5 +218,4 @@ require_once __DIR__ . '/../includes/header.php';
 
 <script src="schedule.js"></script>
 </body>
-
 </html>
