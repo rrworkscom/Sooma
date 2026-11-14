@@ -34,7 +34,7 @@ $hideChrome = $hideChrome ?? false;
             <div class="footer-cta">
                 <h3>Ready To Start?</h3>
                 <p>Join our community and transform your body and mind into a healthy self.</p>
-                <a class="button button-light" href="packages.php">Book Your Class</a>
+                <a class="button button-light" href="packages.php">Book Class Now</a>
             </div>
 
         </div>

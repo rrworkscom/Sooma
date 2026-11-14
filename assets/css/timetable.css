@@ -1,0 +1,460 @@
+.timetable-page {
+  --tt-bg: #f6f4ee;
+  --tt-ink: #43352e;
+  --tt-sage: #a3b2a1;
+  --tt-blue: #cfe8ff;
+  --tt-yellow: #ffdc9b;
+  background: var(--tt-bg);
+  color: var(--tt-ink);
+  font-family: "Montserrat", sans-serif;
+}
+
+.timetable-main {
+  width: min(100% - 64px, 1320px);
+  margin: 0 auto;
+  padding: 170px 0 100px;
+}
+
+.timetable-heading {
+  margin-bottom: 44px;
+}
+
+.timetable-heading h1 {
+  margin: 0 0 6px;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.timetable-heading p {
+  font-size: 16px;
+}
+
+.calendar-month-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+
+.calendar-month-row h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 24px;
+}
+
+.private-request-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 20px;
+  border: 1px solid #dedbd5;
+  border-radius: 12px;
+  background: #fff;
+  font: 600 16px inherit;
+  cursor: pointer;
+}
+
+.private-request-btn:hover {
+  background: #eae8e1;
+}
+
+.date-strip {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) 48px;
+  align-items: center;
+  gap: 12px;
+  min-height: 132px;
+  padding: 12px 8px;
+  border: 1px solid rgba(255, 255, 255, .75);
+  border-radius: 24px;
+}
+
+.date-strip--moved {
+  position: relative;
+  z-index: 5;
+  width: 100%;
+  margin: 0 0 18px;
+  background: var(--tt-bg);
+}
+
+.schedule-day>.date-strip {
+  flex: 0 0 auto;
+}
+
+.date-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 64px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.chevron {
+  display: block;
+  width: 20px;
+  height: 20px;
+  border-top: 3px solid #111;
+  border-right: 3px solid #111;
+}
+
+.chevron-left {
+  transform: rotate(-135deg);
+}
+
+.chevron-right {
+  transform: rotate(45deg);
+}
+
+.date-list {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.date-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  height: 112px;
+  border: 2px solid var(--tt-sage);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tt-ink);
+  font: inherit;
+  cursor: pointer;
+  transform: translateY(0) scale(1);
+  transform-origin: center;
+  z-index: 1;
+  transition: transform .38s cubic-bezier(.22, .8, .25, 1), background-color .3s ease,
+    color .3s ease, border-color .3s ease, box-shadow .3s ease;
+  will-change: transform;
+}
+
+.date-card:nth-child(1),
+.date-card:nth-child(4),
+.date-card:nth-child(5),
+.date-card:nth-child(6),
+.date-card:nth-child(7) {
+  background: rgba(163, 178, 161, .55);
+}
+
+.date-card:hover {
+  background: rgba(163, 178, 161, .75);
+}
+
+.date-card.selected {
+  transform: translateY(-7px) scale(1.055);
+  z-index: 3;
+  border-color: #7f9180;
+  background: var(--tt-sage);
+  color: #fff;
+  box-shadow: 0 5px 0 rgba(67, 53, 46, .24);
+}
+
+.date-card:focus-visible {
+  outline: 3px solid rgba(67, 53, 46, .35);
+  outline-offset: 4px;
+}
+
+.date-list,
+.date-strip {
+  overflow: visible;
+}
+
+.date-day {
+  margin-bottom: 8px;
+  font-size: 18px;
+}
+
+.date-number {
+  font-size: 30px;
+  line-height: 1;
+}
+
+.timetable-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 28px;
+  margin: 20px 0 24px;
+}
+
+.timetable-filters select {
+  width: 100%;
+  height: 48px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 12px;
+  outline-color: var(--tt-sage);
+  background: #fff;
+  color: #6f6a64;
+  font: 14px "Montserrat", sans-serif;
+  cursor: pointer;
+}
+
+.timetable-divider {
+  height: 1px;
+  margin: 0 28px 48px;
+  background: #cfcac1;
+}
+
+.schedule-list {
+  display: flex;
+  flex-direction: column;
+  gap: 76px;
+}
+
+.schedule-day {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.schedule-day-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.schedule-day-heading small {
+  color: #8c8780;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.schedule-card {
+  display: grid;
+  grid-template-columns: 115px 1fr 1fr 1.35fr 1.1fr 1fr .8fr 130px;
+  align-items: center;
+  gap: 24px;
+  min-height: 142px;
+  padding: 20px 28px;
+  border: 1px solid #fff;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .18);
+  box-shadow: 0 2px 2px rgba(0, 0, 0, .12);
+}
+
+.schedule-time {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 90px;
+  padding-right: 20px;
+  border-right: 1px solid #d8d4cc;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.schedule-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.detail-label {
+  font-weight: 700;
+}
+
+.schedule-action {
+  justify-self: end;
+  min-width: 120px;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 14px;
+  color: #43352e;
+  font: 16px "Montserrat", sans-serif;
+  cursor: pointer;
+}
+
+.schedule-action.book {
+  background: var(--tt-blue);
+}
+
+.schedule-action.waitlist {
+  background: var(--tt-yellow);
+}
+
+.empty-schedule {
+  padding: 12px 0;
+  color: #8c8780;
+  font-size: 14px;
+}
+
+@media(max-width:1100px) {
+  .timetable-main {
+    width: min(100% - 40px, 1320px);
+  }
+
+  .date-list {
+    gap: 8px;
+  }
+
+  .schedule-card {
+    grid-template-columns: 100px repeat(3, minmax(0, 1fr));
+    gap: 20px;
+  }
+
+  .schedule-time {
+    grid-row: span 2;
+  }
+
+  .schedule-action {
+    justify-self: start;
+  }
+}
+
+@media(max-width:700px) {
+  .timetable-main {
+    width: calc(100% - 28px);
+    padding-top: 130px;
+  }
+
+  .timetable-heading {
+    margin-bottom: 28px;
+  }
+
+  .timetable-heading h1 {
+    font-size: 24px;
+  }
+
+  .calendar-month-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .calendar-month-row h2 {
+    font-size: 20px;
+  }
+
+  .date-strip {
+    grid-template-columns: 28px minmax(0, 1fr) 28px;
+    gap: 4px;
+    padding: 8px 2px;
+  }
+
+  .date-strip--moved {
+    margin-bottom: 14px;
+  }
+
+  .date-nav-btn {
+    width: 28px;
+  }
+
+  .chevron {
+    width: 14px;
+    height: 14px;
+  }
+
+  .date-list {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .date-card {
+    height: 78px;
+    border-width: 1px;
+    border-radius: 6px;
+  }
+
+  .date-day {
+    margin-bottom: 6px;
+    font-size: 11px;
+  }
+
+  .date-number {
+    font-size: 20px;
+  }
+
+  .timetable-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .timetable-filters select {
+    height: 42px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+
+  .timetable-divider {
+    margin: 0 8px 32px;
+  }
+
+  .schedule-list {
+    gap: 44px;
+  }
+
+  .schedule-day-heading {
+    flex-wrap: wrap;
+    font-size: 15px;
+  }
+
+  .schedule-card {
+    grid-template-columns: 1fr 1fr;
+    gap: 18px 12px;
+    min-height: 0;
+    padding: 18px;
+  }
+
+  .schedule-time {
+    grid-column: 1/-1;
+    grid-row: auto;
+    min-height: 0;
+    padding: 0 0 12px;
+    border-right: 0;
+    border-bottom: 1px solid #d8d4cc;
+  }
+
+  .schedule-detail {
+    font-size: 11px;
+  }
+
+  .schedule-action {
+    grid-column: 1/-1;
+    justify-self: stretch;
+    width: 100%;
+  }
+}
+
+/* Smooth schedule content entrance when selecting a date or changing weeks. */
+.schedule-day-enter {
+  animation: timetableDayEnter .38s ease both;
+}
+
+@keyframes timetableDayEnter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .date-card,
+  .schedule-day-enter {
+    transition: none;
+    animation: none;
+  }
+}

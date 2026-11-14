@@ -16,12 +16,20 @@ if ($email === '' || $password === '') {
 }
 
 try {
-    $stmt = $pdo->prepare(
-        "SELECT user_id, name, email, password, phone, role
-         FROM users
-         WHERE lower(email) = :email
-         LIMIT 1"
-    );
+$stmt = $pdo->prepare(
+    "SELECT
+        u.user_id,
+        u.name,
+        u.email,
+        u.password,
+        u.phone_number,
+        r.role_name AS role
+     FROM sooma_wellness.users u
+     JOIN sooma_wellness.roles r
+        ON u.role_id = r.role_id
+     WHERE LOWER(u.email) = :email
+     LIMIT 1"
+);
 
     $stmt->execute([
         ':email' => $email
@@ -47,8 +55,17 @@ try {
     $_SESSION['user_id'] = $user['user_id'];
     $_SESSION['name']    = $user['name'];
     $_SESSION['email']   = $user['email'];
-    $_SESSION['phone']   = $user['phone'];
-    $_SESSION['role']    = $role;
+    $_SESSION['phone']   = $user['phone_number'];
+    $_SESSION['role']    = $user['role'];
+
+    $_SESSION['user'] = [
+        'id'        => $user['user_id'],
+        'full_name' => $user['name'],
+        'name'      => $user['name'],
+        'email'     => $user['email'],
+        'phone'     => $user['phone_number'],
+        'role'      => $user['role']
+    ];
 
     switch ($role) {
         case 'admin':
@@ -64,9 +81,9 @@ try {
             break;
     }
     exit;
-
 } catch (PDOException $e) {
-    error_log($e->getMessage());
-    header('Location: ../index.php?page=login&error=server');
+    echo '<pre>';
+    echo 'LOGIN ERROR: ' . $e->getMessage();
+    echo '</pre>';
     exit;
 }

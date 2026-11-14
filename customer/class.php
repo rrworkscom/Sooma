@@ -1,4 +1,10 @@
 <?php
+$pageTitle  = 'Class';
+$bodyClass  = 'class-page';
+$headerType = 'customer';
+$headerLogo = 'black';
+$basePath   = '../assets/';
+
 function e(?string $value): string
 {
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');

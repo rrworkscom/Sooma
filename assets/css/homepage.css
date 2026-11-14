@@ -488,7 +488,14 @@ p {
 }
 .submit-button {
     width: 100%;
-    padding: 11px
+    padding: 11px;
+    gap: 8px
+}
+
+.submit-button img {
+    width: 20px;
+    height: 16px;
+    object-fit: contain;
 }
 
 @media(min-width:1500px) {
@@ -762,7 +769,7 @@ p {
     overflow: hidden;
     border-radius: 50%;
     border: 1px solid rgba(255, 255, 255, 0.2);
-    margin-left: -45px;
+    margin-left: -20px;
 }
 
 .nav-profile img,
@@ -770,6 +777,16 @@ p {
     display: block;
     width: 55px;
     height: 55px;
-    object-fit: cover;
+    object-fit: contain;
     border-radius: 50%;
+    object-position: center;
+}
+
+.contact-form .submit-button {
+    background: var(--ink);
+    color: #fff;
+}
+
+.contact-form .submit-button:hover {
+    background: #3e322b;
 }

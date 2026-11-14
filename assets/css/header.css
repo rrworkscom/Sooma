@@ -1,5 +1,4 @@
 :root {
-    /* Warna (diekstrak dari Figma) */
     --color-bg:            #f6f4ee;              
     --color-card:          #ffffff;               
     --color-text:          #3e322b;             
@@ -110,8 +109,8 @@ h1, h2, h3, p { margin: 0; }
     flex-shrink: 0;
 }
 .site-header__logo img {
-   display: block;
-    width: 105px;
+    display: block;
+    width: 200px;
     height: auto;
     object-fit: contain;
 }
@@ -165,6 +164,7 @@ h1, h2, h3, p { margin: 0; }
     overflow: hidden;
     border-radius: 50%;
     border: 1px solid rgba(0, 0, 0, 0.08);
+    margin-right: 25px;
 }
 .site-header__avatar img {
     display: block;

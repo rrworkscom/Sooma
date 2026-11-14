@@ -8,6 +8,13 @@ $bodyClass  = $bodyClass ?? '';
 $hideChrome = $hideChrome ?? false;
 
 $headerType  = $headerType ?? $_SESSION['role'] ?? 'customer';
+$headerLogo = $headerLogo ?? 'white';
+
+$logoFile = $headerLogo === 'black'
+    ? 'sooma-logo-black.png'
+    : 'sooma-logo-white.png';
+
+$currentPage = basename($_SERVER['PHP_SELF']);
 $currentPage = basename($_SERVER['PHP_SELF']);
 
 if (!function_exists('header_e')) {
@@ -34,8 +41,8 @@ $menus = [
 
 $adminMenus = [
     'dashboard_admin.php' => 'Home',
-    'scheduleclass.php'   => 'Schedule & Class',
     'booking.php'         => 'Booking',
+    'schedule-class.php'  => 'Schedule & Class',
     'instructors.php'     => 'Instructors',
 ];
 
@@ -56,15 +63,16 @@ $isAuthPage = (strpos($_SERVER['REQUEST_URI'], 'login') !== false || strpos($_SE
 
     <?php if ($headerType === 'admin'): ?>
         <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-        <link rel="stylesheet" href="<?= header_e($assetBase) ?>css/booking.css">
+        <link rel="stylesheet" href="<?= header_e($assetBase) ?>css/schedule-class.css">
     <?php else: ?>
         <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Montserrat+Alternates:wght@400&display=swap" rel="stylesheet">
         <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css" />
-        
+
         <?php if ($isAuthPage): ?>
             <link rel="stylesheet" href="<?= header_e($assetBase) ?>css/auth.css">
         <?php else: ?>
             <link rel="stylesheet" href="<?= header_e($assetBase) ?>css/header.css">
+            <link rel="stylesheet" href="<?= header_e($assetBase) ?>css/footer.css">
         <?php endif; ?>
     <?php endif; ?>
 </head>
@@ -83,7 +91,7 @@ $isAuthPage = (strpos($_SERVER['REQUEST_URI'], 'login') !== false || strpos($_SE
                 <div class="nav-links">
                     <?php foreach ($adminMenus as $url => $label): ?>
                         <a href="<?= header_e($url) ?>"
-                           class="<?= $currentPage === $url ? 'active' : '' ?>">
+                            class="<?= $currentPage === $url ? 'active' : '' ?>">
                             <?= header_e($label) ?>
                         </a>
                     <?php endforeach; ?>
@@ -100,7 +108,9 @@ $isAuthPage = (strpos($_SERVER['REQUEST_URI'], 'login') !== false || strpos($_SE
 
             <header class="site-header" id="site-header">
                 <a class="site-header__logo" href="index.php" aria-label="Sooma Wellness — Home">
-                    <img src="<?= header_e($assetBase) ?>images/sooma-logo-white.png" alt="Sooma Wellness">
+                    <img
+                        src="<?= header_e($assetBase) ?>images/<?= header_e($logoFile) ?>"
+                        alt="Sooma Wellness">
                 </a>
 
                 <input class="site-header__toggle" type="checkbox" id="nav-toggle" aria-label="Toggle menu">
@@ -110,14 +120,14 @@ $isAuthPage = (strpos($_SERVER['REQUEST_URI'], 'login') !== false || strpos($_SE
 
                 <nav class="site-nav" aria-label="Main navigation">
                     <ul class="site-nav__list">
-                        <?php foreach ($menus as $slug => $label): 
+                        <?php foreach ($menus as $slug => $label):
                             $href = ($slug === 'home') ? 'index.php' : "{$slug}.php";
                             $isActive = (($_GET['page'] ?? '') === $slug) || ($currentPage === "{$slug}.php") || ($currentPage === 'index.php' && $slug === 'home');
                         ?>
                             <li class="site-nav__item">
                                 <a class="site-nav__link<?= $isActive ? ' active' : '' ?>"
-                                   href="<?= header_e($href) ?>"
-                                   <?= $isActive ? 'aria-current="page"' : '' ?>>
+                                    href="<?= header_e($href) ?>"
+                                    <?= $isActive ? 'aria-current="page"' : '' ?>>
                                     <?= header_e($label) ?>
                                 </a>
                             </li>
@@ -126,7 +136,7 @@ $isAuthPage = (strpos($_SERVER['REQUEST_URI'], 'login') !== false || strpos($_SE
                 </nav>
 
                 <a class="site-header__avatar" href="profile.php" aria-label="My profile">
-                     <img src="https://i.pinimg.com/736x/ad/25/f5/ad25f5146c840b01509b125c4e0009b8.jpg" alt="Customer Profile">
+                    <img src="https://i.pinimg.com/736x/ad/25/f5/ad25f5146c840b01509b125c4e0009b8.jpg" alt="Customer Profile">
                 </a>
             </header>
 

@@ -1,4 +1,6 @@
 <?php
+$headerType = 'customer';
+$headerLogo = 'black';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();

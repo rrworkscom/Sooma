@@ -4,7 +4,7 @@ session_start();
 require_once __DIR__ . '/../login-regist/connection.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    header('Location: booking.php');
+    header('Location: schedule-class.php');
     exit;
 }
 
@@ -40,12 +40,12 @@ try {
         ':member_slot'   => $memberSlot
     ]);
 
-    header('Location: booking.php?success=1');
+    header('Location: schedule-class.php?success=1');
     exit;
 
 } catch (PDOException $e) {
     error_log('Schedule insert failed: ' . $e->getMessage());
 
-    header('Location: booking.php?error=save_failed');
+    header('Location: schedule-class.php?error=save_failed');
     exit;
 }

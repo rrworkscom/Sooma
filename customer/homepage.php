@@ -27,13 +27,13 @@ $pageTitle = 'Sooma Wellness';
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
-        <link rel="stylesheet" href="../assets/css/footer.css">
+    <link rel="stylesheet" href="../assets/css/footer.css">
     <link rel="stylesheet" href="../assets/css/header.css">
     <link rel="stylesheet" href="../assets/css/homepage.css">
 </head>
 
 <body>
-            <?php require_once '../includes/header.php'; ?>
+    <?php require_once '../includes/header.php'; ?>
     <main>
 
         <section class="hero" id="home">
@@ -53,7 +53,7 @@ $pageTitle = 'Sooma Wellness';
                 </p>
 
                 <div class="hero-actions">
-                    <a class="button button-sage" href="#contact">Book Your Class</a>
+                    <a class="button button-sage" href="#contact">Book Class Now</a>
                     <a class="button button-outline" href="#classes">Explore Classes</a>
                 </div>
             </div>
@@ -330,16 +330,18 @@ $pageTitle = 'Sooma Wellness';
                 </label>
 
                 <button class="button button-sage submit-button" type="submit">
-                    Submit <span>➤</span>
+                    Submit
+                    <img src="../assets/images/arrow-circle-right-fill.svg" alt="">
                 </button>
             </form>
         </section>
 
     </main>
 
-     <?php require_once '../includes/footer.php'; ?>
+    <?php require_once '../includes/footer.php'; ?>
 
     <script src="../assets/js/homepage.js"></script>
 
 </body>
+
 </html>
