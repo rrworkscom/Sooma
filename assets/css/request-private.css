@@ -1,0 +1,111 @@
+.rp-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+@media (max-width: 640px) {
+  .rp-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.rp-select {
+  appearance: none;
+  background-color: #fff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='%233e322b' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 34px;
+  cursor: pointer;
+}
+
+.rp-day-hint {
+  margin-top: 4px;
+  padding-left: 10px;
+  font-size: 11px;
+  color: var(--bd-sage-dark);
+}
+
+.rp-alert--success {
+  background: rgba(163, 178, 161, 0.22);
+  border: 1px solid var(--bd-sage-dark);
+  color: var(--bd-ink);
+}
+
+.rp-status-card {
+  background: #fff;
+  border: 1px solid var(--bd-sage-dark);
+  border-radius: 12px;
+  padding: 24px clamp(18px, 5%, 36px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.rp-status-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.rp-status-card__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--bd-muted);
+}
+
+.rp-status-card__code {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--bd-ink);
+}
+
+.rp-status-card__desc {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--bd-ink);
+}
+
+.rp-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  background: #d1e8fc;
+  color: #102552;
+}
+
+.rp-note-box {
+  margin-top: 16px;
+  padding: 14px 18px;
+  border-radius: 8px;
+  background: rgba(163, 178, 161, 0.14);
+  border: 1px dashed var(--bd-sage-dark);
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--bd-ink);
+}
+
+.rp-actions--mt {
+  margin-top: 24px;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.rp-btn-edit {
+  width: auto;
+  padding: 0 20px;
+  margin-top: 0;
+  font-size: 14px;
+}
+
+.rp-btn-link {
+  text-decoration: none;
+}

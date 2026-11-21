@@ -22,7 +22,9 @@ require_once __DIR__ . '/../includes/header.php';
         <img src="../assets/images/calendar.svg" alt="" class="calendar-icon">
         <span id="monthLabel"></span>
       </h2>
-      <button class="private-request-btn" type="button">✚ Request Private</button>
+      <a href="request-private.php" class="private-request-btn" style="text-decoration: none; display: inline-flex; align-items: center;">
+        ✚ Request Private
+      </a>
     </div>
     <div class="date-strip">
       <button class="date-nav-btn" id="previousWeek" type="button" aria-label="Previous week"><span class="chevron chevron-left"></span></button>
