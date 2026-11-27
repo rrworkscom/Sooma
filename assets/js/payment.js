@@ -14,6 +14,7 @@
   var ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 
   var status = root.dataset.status || 'waiting';
+  var isPackageMode = root.dataset.mode === 'package';
   var badge = document.getElementById('pay-badge');
   var badgeText = document.getElementById('pay-badge-text');
   var countdown = document.getElementById('pay-countdown');
@@ -30,7 +31,7 @@
   var removeBtn = document.getElementById('pay-remove');
   var submitBtn = document.getElementById('pay-submit');
 
-  var packageBox = document.querySelector('.pay-package-box') || root;
+  var packageBox = isPackageMode ? (document.querySelector('.pay-package-box') || root) : null;
   var packageForm = packageBox ? (packageBox.tagName === 'FORM' ? packageBox : packageBox.querySelector('form')) : null;
   var packageSelect = packageBox ? packageBox.querySelector('select[name*="package"], select') : null;
   var packageRadios = packageBox ? Array.prototype.slice.call(packageBox.querySelectorAll('input[type="radio"]')) : [];
@@ -56,7 +57,7 @@
   function setPackageControlsDisabled(disabled) {
     if (!packageBox) return;
     packageBox.querySelectorAll('button, select, input').forEach(function (el) {
-      if (el === fileInput || el === submitBtn || el === removeBtn) return;
+      if (el === fileInput || el === submitBtn || el === removeBtn || el.id === 'pay-copy-account') return;
       el.disabled = disabled;
     });
     packageCards.forEach(function (card) {

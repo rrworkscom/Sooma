@@ -11,8 +11,9 @@ require_once __DIR__ . '/../login-regist/connection.php';
 $purchasePageUrl  = 'packages-purchase.php';
 $packagesListUrl  = 'packages.php';
 $transactionUrl   = '../customer/profile-transaction.php';
-$qrImage          = '../assets/images/qris-payment.png';
 $bankName         = 'BCA Sooma Wellness';
+$bankAccount      = '5105555005';
+$bankHolder       = 'RR VANESSA VIOLETA';
 $uploadDir        = __DIR__ . '/../uploads/receipts';
 $maxBytes         = 5 * 1024 * 1024;
 $paymentTtl       = 30 * 60;
@@ -76,7 +77,6 @@ $statusLabels = [
 $sessionUser = $_SESSION['user'] ?? [];
 $userId      = (int) ($_SESSION['user_id'] ?? $sessionUser['user_id'] ?? $sessionUser['id'] ?? 0);
 
-// 1. Inisiasi transaksi pembelian paket (POST dari packages-purchase.php)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['payment_method'] ?? '') === 'one_time') {
     $packageId     = (int) ($_POST['package_id'] ?? 0);
     $pkgSlug       = trim((string) ($_POST['pkg_slug'] ?? ''));
@@ -114,18 +114,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['payment_method'] ?? '') ==
             if ($customerId > 0) {
                 $pdo->beginTransaction();
 
-                // Pembayaran awal berstatus 'pending' sampai di-ACC admin
                 $stmtPay = $pdo->prepare("
                     INSERT INTO sooma_wellness.payments
                         (gross_amount, payment_method, verification_status)
                     VALUES
-                        (:amount, 'qris', 'pending')
+                        (:amount, 'bank_transfer', 'pending')
                     RETURNING payment_id
                 ");
                 $stmtPay->execute([':amount' => $price]);
                 $paymentId = (int) $stmtPay->fetchColumn();
 
-                // Paket dibuat dengan status 'pending' (belum aktif sebelum ACC admin)
                 if (pkg_has_status_column($pdo)) {
                     $stmtPkg = $pdo->prepare("
                         INSERT INTO sooma_wellness.user_packages
@@ -202,7 +200,6 @@ if (empty($draft['expires_at'])) {
 
 $status = (string) ($draft['status'] ?? 'waiting');
 
-// Sinkronkan status jika admin sudah meng-ACC pembayaran di database
 if (!empty($draft['payment_id']) && isset($pdo) && $pdo instanceof PDO) {
     try {
         $stmtChk = $pdo->prepare("
@@ -266,7 +263,6 @@ if (empty($_SESSION['csrf'])) {
     $_SESSION['csrf'] = bin2hex(random_bytes(32));
 }
 
-// 2. Proses upload bukti transfer (POST action = upload_receipt)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $wantsJson = ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'fetch';
 
@@ -337,7 +333,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $originalName = mb_substr_safe((string) $f['name'], 120);
 
-        // Simpan bukti bayar & ubah status pembayaran menjadi waiting_verification (paket tetap pending sampai ACC admin)
         if (!empty($draft['payment_id']) && isset($pdo) && $pdo instanceof PDO) {
             try {
                 $stmtUpd = $pdo->prepare("
@@ -382,11 +377,11 @@ if (!empty($draft['pkg_slug'])) {
 }
 
 $steps = [
-    ['Take Picture of QR Code',        'Take a picture of the QR code if you are using a different device to complete the payment'],
-    ['Open E-Wallet / Bank App',       'Open your E-Wallet app (GoPay, OVO, ShopeePay, DANA, BCA, Mandiri, etc.) and select the Scan/Pay/QRIS menu'],
-    ['Upload Picture / Scan QR Code',  'Select the picture you took of the QR Code or scan the QR code displayed directly'],
-    ['Confirm & Enter PIN',            'Check the payment amount, confirm the merchant’s name, and then complete the transaction with your PIN'],
-    ['Upload Payment Receipt',         'Save the payment receipt, then upload it; your package will be activated after admin verification'],
+    ['Open Mobile Banking / ATM',     'Open your Mobile Banking app (BCA Mobile, myBCA, Mandiri, BRI, etc.) or visit the nearest ATM and select the Transfer menu'],
+    ['Select Destination Bank',       'Choose Bank BCA as the destination bank and enter the account number ' . $bankAccount . ' (' . $bankHolder . ')'],
+    ['Enter Exact Transfer Amount',   'Input the exact Total Payment amount displayed on this page so your payment can be verified quickly'],
+    ['Confirm & Complete Transfer',   'Double-check the recipient name (' . $bankHolder . ') and amount, then authorize the transfer with your PIN'],
+    ['Upload Transfer Receipt',       'Save or screenshot the transfer receipt, then upload it; your package will be activated after admin verification'],
 ];
 
 $pageTitle  = 'Package Payment';
@@ -410,7 +405,7 @@ require __DIR__ . '/../includes/header.php';
 
 <main class="pay-page" id="pay-root"
     data-status="<?= e($status) ?>" data-remaining="<?= $remaining ?>"
-    data-max="<?= $maxBytes ?>" data-mode="qr">
+    data-max="<?= $maxBytes ?>" data-mode="bank">
 
     <a href="<?= e($backUrl) ?>" class="pay-back">
         <span class="pay-back__icon"><i class="ph ph-caret-left"></i></span>
@@ -421,45 +416,61 @@ require __DIR__ . '/../includes/header.php';
 
     <div class="pay-layout">
 
-        <section class="pay-left" aria-label="Payment QR code">
-            <p class="pay-hint"><i class="ph ph-scan"></i> Scan or Screenshot QR Code to Pay</p>
+        <section class="pay-left" aria-label="Payment details and receipt upload">
+            <div class="pay-package-box pay-bank-box">
+                <i class="ph ph-bank"></i>
+                <h2>Bank Transfer</h2>
+                <p>Transfer the exact amount to the bank account below and upload your receipt.</p>
 
-            <div class="pay-qr">
-                <img src="<?= e($qrImage) ?>" alt="QR code for payment of <?= e('Rp' . number_format($total, 0, '.', ',')) ?>"
-                    onerror="this.hidden=true;this.nextElementSibling.hidden=false;">
-                <div class="pay-qr__fallback" hidden>QR code image not found.<br><small><?= e($qrImage) ?></small></div>
-            </div>
-
-            <form id="pay-upload-form" class="pay-upload" method="post" action=""
-                enctype="multipart/form-data" novalidate>
-                <input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>">
-                <input type="hidden" name="action" value="upload_receipt">
-                <input type="file" id="pay-receipt" name="receipt" class="pay-file"
-                    accept="image/jpeg,image/png,image/webp,application/pdf,.pdf" <?= $canUpload ? '' : 'disabled' ?>>
-
-                <label for="pay-receipt" id="pay-upload-btn"
-                    class="pay-upload-btn <?= $canUpload ? '' : 'is-disabled' ?>"
-                    role="button" tabindex="<?= $canUpload ? '0' : '-1' ?>" aria-disabled="<?= $canUpload ? 'false' : 'true' ?>">
-                    <i class="ph ph-upload-simple"></i><span>Upload Payment Receipt</span>
-                </label>
-
-                <div class="pay-preview" id="pay-preview" <?= $receipt ? '' : 'hidden' ?>>
-                    <div class="pay-preview__thumb" id="pay-thumb"><i class="ph ph-file"></i></div>
-                    <div class="pay-preview__meta">
-                        <span class="pay-preview__name" id="pay-file-name"><?= e($receipt['original'] ?? '') ?></span>
-                        <span class="pay-preview__size" id="pay-file-size"><?= $receipt ? 'Submitted' : '' ?></span>
+                <div class="pay-bank-card">
+                    <div class="pay-bank-card__main">
+                        <h3 class="pay-bank-card__bank"><?= e($bankName) ?></h3>
+                        <p class="pay-bank-card__label">Account Number</p>
+                        <div class="pay-bank-card__number-row">
+                            <span class="pay-bank-card__account" id="pay-bank-account" title="Click to copy"><?= e(preg_replace('/\s+/', '', $bankAccount)) ?></span>
+                            <button type="button" id="pay-copy-account" class="pay-copy-btn">
+                                <i class="ph ph-copy"></i>
+                                <span id="pay-copy-label">Copy</span>
+                            </button>
+                        </div>
                     </div>
-                    <button type="button" class="pay-preview__remove" id="pay-remove" aria-label="Remove file" <?= $receipt ? 'hidden' : '' ?>>
-                        <i class="ph ph-x"></i>
-                    </button>
+                    <div class="pay-bank-card__foot">
+                        <span class="pay-bank-card__holder">Account Name</span>
+                        <strong><?= e($bankHolder) ?></strong>
+                    </div>
                 </div>
 
-                <button type="submit" class="pay-submit" id="pay-submit" hidden>
-                    <i class="ph ph-paper-plane-tilt"></i><span>Submit Receipt</span>
-                </button>
+                <form id="pay-upload-form" class="pay-upload pay-bank-upload" method="post" action=""
+                    enctype="multipart/form-data" novalidate>
+                    <input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>">
+                    <input type="hidden" name="action" value="upload_receipt">
+                    <input type="file" id="pay-receipt" name="receipt" class="pay-file"
+                        accept="image/jpeg,image/png,image/webp,application/pdf,.pdf" <?= $canUpload ? '' : 'disabled' ?>>
 
-                <p class="pay-message <?= $flash ? 'is-' . e($flash['type']) : '' ?>" id="pay-message" role="status" aria-live="polite"><?= e($flash['message'] ?? '') ?></p>
-            </form>
+                    <label for="pay-receipt" id="pay-upload-btn"
+                        class="pay-upload-btn <?= $canUpload ? '' : 'is-disabled' ?>"
+                        role="button" tabindex="<?= $canUpload ? '0' : '-1' ?>" aria-disabled="<?= $canUpload ? 'false' : 'true' ?>">
+                        <i class="ph ph-upload-simple"></i><span>Upload Payment Receipt</span>
+                    </label>
+
+                    <div class="pay-preview" id="pay-preview" <?= $receipt ? '' : 'hidden' ?>>
+                        <div class="pay-preview__thumb" id="pay-thumb"><i class="ph ph-file"></i></div>
+                        <div class="pay-preview__meta">
+                            <span class="pay-preview__name" id="pay-file-name"><?= e($receipt['original'] ?? '') ?></span>
+                            <span class="pay-preview__size" id="pay-file-size"><?= $receipt ? 'Submitted' : '' ?></span>
+                        </div>
+                        <button type="button" class="pay-preview__remove" id="pay-remove" aria-label="Remove file" <?= $receipt ? 'hidden' : '' ?>>
+                            <i class="ph ph-x"></i>
+                        </button>
+                    </div>
+
+                    <button type="submit" class="pay-submit" id="pay-submit" hidden>
+                        <i class="ph ph-paper-plane-tilt"></i><span>Submit Receipt</span>
+                    </button>
+
+                    <p class="pay-message <?= $flash ? 'is-' . e($flash['type']) : '' ?>" id="pay-message" role="status" aria-live="polite"><?= e($flash['message'] ?? '') ?></p>
+                </form>
+            </div>
         </section>
 
         <section class="pay-right" aria-label="Payment details">
@@ -518,5 +529,49 @@ require __DIR__ . '/../includes/header.php';
     </section>
 </main>
 
+<script>
+(function() {
+    var copyBtn = document.getElementById('pay-copy-account');
+    var accountEl = document.getElementById('pay-bank-account');
+    var copyLabel = document.getElementById('pay-copy-label');
+
+    function copyAccountNumber() {
+        if (!accountEl) return;
+        var acct = accountEl.textContent.trim();
+
+        function showCopied() {
+            if (copyBtn) copyBtn.classList.add('is-copied');
+            if (copyLabel) copyLabel.textContent = 'Copied!';
+            setTimeout(function() {
+                if (copyBtn) copyBtn.classList.remove('is-copied');
+                if (copyLabel) copyLabel.textContent = 'Copy';
+            }, 1800);
+        }
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(acct).then(showCopied).catch(fallbackCopy);
+        } else {
+            fallbackCopy();
+        }
+
+        function fallbackCopy() {
+            var ta = document.createElement('textarea');
+            ta.value = acct;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            try {
+                document.execCommand('copy');
+                showCopied();
+            } catch (e) {}
+            document.body.removeChild(ta);
+        }
+    }
+
+    if (copyBtn) copyBtn.addEventListener('click', copyAccountNumber);
+    if (accountEl) accountEl.addEventListener('click', copyAccountNumber);
+})();
+</script>
 <?php require __DIR__ . '/../includes/footer.php'; ?>
 <script src="../assets/js/payment.js"></script>

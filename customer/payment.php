@@ -9,8 +9,9 @@ if (session_status() === PHP_SESSION_NONE) {
 $bookingUrl     = 'booking-detail.php';
 $timetableUrl   = 'timetable.php';
 $transactionUrl = '../customer/profile-transaction.php?tab=pending';
-$qrImage        = '../assets/images/qris-payment.jpeg';
 $bankName       = 'BCA Sooma Wellness';
+$bankAccount    = '5105555005';
+$bankHolder     = 'RR VANESSA VIOLETA';
 $maxBytes       = 5 * 1024 * 1024;
 
 require __DIR__ . '/../includes/booking-service.php';
@@ -87,7 +88,7 @@ $statusLabels = [
 $sessionUser = $_SESSION['user'] ?? [];
 $userId      = (int) ($sessionUser['id'] ?? $sessionUser['user_id'] ?? 0);
 $draft       = $_SESSION['booking_draft'] ?? [];
-$dbId        = (int) ($_GET['id'] ?? $draft['db_id'] ?? $draft['id'] ?? 0);
+$dbId        = (int) ($_GET['id'] ?? $_GET['booking_id'] ?? $draft['db_id'] ?? $draft['id'] ?? 0);
 
 if ($dbId <= 0 || $userId <= 0) {
     header('Location: ' . $timetableUrl);
@@ -225,6 +226,14 @@ if (!$booking) {
     exit;
 }
 
+$savedPreselectedUpId = (int) (
+    $booking['user_package_id']
+    ?? $_SESSION['booking_selected_package'][$dbId]
+    ?? $_SESSION['booking_draft']['selected_user_package_id']
+    ?? 0
+);
+unset($_SESSION['booking_draft']);
+
 if (empty($_SESSION['csrf'])) {
     $_SESSION['csrf'] = bin2hex(random_bytes(32));
 }
@@ -329,7 +338,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $upPay = $pdo->prepare("
                     update sooma_wellness.payments
                        set gross_amount = :amount,
-                           payment_method = 'qris',
+                           payment_method = 'bank_transfer',
                            payment_proof = :proof,
                            verification_status = 'pending',
                            uploaded_at = clock_timestamp()
@@ -352,7 +361,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         uploaded_at
                     ) values (
                         :amount,
-                        'qris',
+                        'bank_transfer',
                         :proof,
                         'pending',
                         clock_timestamp()
@@ -403,13 +412,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'confirm_package' && $paymentMethod === 'package') {
         $requiredSessions = max(1, (int) $booking['attendee_count']);
         $postedUpId       = (int) ($_POST['user_package_id'] ?? $_POST['package_id'] ?? 0);
-        $fallbackUpId     = (int) (
-            $booking['user_package_id']
-            ?? $_SESSION['booking_selected_package'][$dbId]
-            ?? $_SESSION['booking_draft']['selected_user_package_id']
-            ?? 0
-        );
-        $requestedUpId = $postedUpId > 0 ? $postedUpId : $fallbackUpId;
+        $fallbackUpId     = $savedPreselectedUpId;
+        $requestedUpId    = $postedUpId > 0 ? $postedUpId : $fallbackUpId;
 
         try {
             $pdo->beginTransaction();
@@ -524,7 +528,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $pdo->commit();
-            unset($_SESSION['booking_draft']['selected_user_package_id'], $_SESSION['booking_selected_package'][$dbId]);
+            unset($_SESSION['booking_selected_package'][$dbId]);
 
             $booking['status']          = 'confirmed';
             $booking['user_package_id'] = $targetUpId;
@@ -571,12 +575,7 @@ if ($isPackage) {
     }
 }
 
-$preselectedUpId = (int) (
-    $booking['user_package_id']
-    ?? $_SESSION['booking_selected_package'][$dbId]
-    ?? $_SESSION['booking_draft']['selected_user_package_id']
-    ?? 0
-);
+$preselectedUpId = $savedPreselectedUpId;
 $hasValidPreselection = false;
 foreach ($compatiblePayPackages as $up) {
     if ((int) $up['user_package_id'] === $preselectedUpId && !empty($up['is_compatible'])) {
@@ -601,18 +600,13 @@ $flash = $_SESSION['pay_flash'] ?? null;
 unset($_SESSION['pay_flash']);
 
 $formAction = 'payment.php?id=' . $dbId;
-$backUrl    = $bookingUrl;
-$classQuery = $_SESSION['booking_draft']['class'] ?? [];
-if (!empty($classQuery) && is_array($classQuery)) {
-    $backUrl .= '?' . http_build_query($classQuery);
-}
 
 $steps = [
-    ['Take Picture of QR Code',        'Take a picture of the QR code if you are using a different device to complete the payment'],
-    ['Open E-Wallet / Bank App',       'Open your E-Wallet app (GoPay, OVO, ShopeePay, DANA, BCA, Mandiri, etc.) and select the Scan/Pay/QRIS menu'],
-    ['Upload Picture / Scan QR Code',  'Select the picture you took of the QR Code or scan the QR code displayed directly'],
-    ['Confirm & Enter PIN',            'Check the payment amount, confirm the merchant’s name, and then complete the transaction with your PIN'],
-    ['Upload Payment Receipt',         'Save the payment receipt, then upload it to the Upload Payment Receipt section within the payment gateway'],
+    ['Open Mobile Banking / ATM',     'Open your Mobile Banking app (BCA Mobile, myBCA, Mandiri, BRI, etc.) or visit the nearest ATM and select the Transfer menu'],
+    ['Select Destination Bank',       'Choose Bank BCA as the destination bank and enter the account number ' . $bankAccount . ' (' . $bankHolder . ')'],
+    ['Enter Exact Transfer Amount',   'Input the exact Total Payment amount displayed on this page so your payment can be verified quickly'],
+    ['Confirm & Complete Transfer',   'Double-check the recipient name (' . $bankHolder . ') and amount, then authorize the transfer with your PIN'],
+    ['Upload Transfer Receipt',       'Save or screenshot the transfer receipt, then upload it to the Upload Payment Receipt section on this page'],
 ];
 
 $pageTitle  = 'Payment Gateway';
@@ -636,18 +630,13 @@ require __DIR__ . '/../includes/header.php';
 
 <main class="pay-page" id="pay-root"
     data-status="<?= e($status) ?>" data-remaining="<?= $remaining ?>"
-    data-max="<?= $maxBytes ?>" data-mode="<?= $isPackage ? 'package' : 'qr' ?>">
-
-    <a href="<?= e($backUrl) ?>" class="pay-back">
-        <span class="pay-back__icon"><i class="ph ph-caret-left"></i></span>
-        <span>Booking Detail</span>
-    </a>
+    data-max="<?= $maxBytes ?>" data-mode="<?= $isPackage ? 'package' : 'bank' ?>">
 
     <h1 class="pay-title">Payment Gateway</h1>
 
     <div class="pay-layout">
 
-        <section class="pay-left" aria-label="Payment QR code">
+        <section class="pay-left" aria-label="Payment details and receipt upload">
             <?php if ($isPackage): ?>
                 <div class="pay-package-box">
                     <i class="ph ph-package"></i>
@@ -718,44 +707,60 @@ require __DIR__ . '/../includes/header.php';
                     <p class="pay-message <?= $flash ? 'is-' . e($flash['type']) : '' ?>" id="pay-message" role="status" aria-live="polite"><?= e($flash['message'] ?? '') ?></p>
                 </div>
             <?php else: ?>
-                <p class="pay-hint"><i class="ph ph-scan"></i> Scan or Screenshot QR Code to Pay</p>
+                <div class="pay-package-box pay-bank-box">
+                    <i class="ph ph-bank"></i>
+                    <h2>Bank Transfer</h2>
+                    <p>Transfer the exact amount to the bank account below and upload your receipt.</p>
 
-                <div class="pay-qr">
-                    <img src="<?= e($qrImage) ?>" alt="QR code for payment of <?= e('Rp' . number_format($total, 0, '.', ',')) ?>"
-                        onerror="this.hidden=true;this.nextElementSibling.hidden=false;">
-                    <div class="pay-qr__fallback" hidden>QR code image not found.<br><small><?= e($qrImage) ?></small></div>
-                </div>
-
-                <form id="pay-upload-form" class="pay-upload" method="post" action="<?= e($formAction) ?>"
-                    enctype="multipart/form-data" novalidate>
-                    <input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>">
-                    <input type="hidden" name="action" value="payment_proof">
-                    <input type="file" id="pay-receipt" name="receipt" class="pay-file"
-                        accept="image/jpeg,image/png,image/webp" <?= $canUpload ? '' : 'disabled' ?>>
-
-                    <label for="pay-receipt" id="pay-upload-btn"
-                        class="pay-upload-btn <?= $canUpload ? '' : 'is-disabled' ?>"
-                        role="button" tabindex="<?= $canUpload ? '0' : '-1' ?>" aria-disabled="<?= $canUpload ? 'false' : 'true' ?>">
-                        <i class="ph ph-upload-simple"></i><span>Upload Payment Receipt</span>
-                    </label>
-
-                    <div class="pay-preview" id="pay-preview" <?= $receipt ? '' : 'hidden' ?>>
-                        <div class="pay-preview__thumb" id="pay-thumb"><i class="ph ph-file"></i></div>
-                        <div class="pay-preview__meta">
-                            <span class="pay-preview__name" id="pay-file-name"><?= e($receipt['original'] ?? '') ?></span>
-                            <span class="pay-preview__size" id="pay-file-size"><?= $receipt ? 'Submitted' : '' ?></span>
+                    <div class="pay-bank-card">
+                        <div class="pay-bank-card__main">
+                            <h3 class="pay-bank-card__bank"><?= e($bankName) ?></h3>
+                            <p class="pay-bank-card__label">Account Number</p>
+                            <div class="pay-bank-card__number-row">
+                                <span class="pay-bank-card__account" id="pay-bank-account" title="Click to copy"><?= e(preg_replace('/\s+/', '', $bankAccount)) ?></span>
+                                <button type="button" id="pay-copy-account" class="pay-copy-btn">
+                                    <i class="ph ph-copy"></i>
+                                    <span id="pay-copy-label">Copy</span>
+                                </button>
+                            </div>
                         </div>
-                        <button type="button" class="pay-preview__remove" id="pay-remove" aria-label="Remove file" <?= $receipt ? 'hidden' : '' ?>>
-                            <i class="ph ph-x"></i>
-                        </button>
+                        <div class="pay-bank-card__foot">
+                            <span class="pay-bank-card__holder">Account Name</span>
+                            <strong><?= e($bankHolder) ?></strong>
+                        </div>
                     </div>
 
-                    <button type="submit" class="pay-submit" id="pay-submit" hidden>
-                        <i class="ph ph-paper-plane-tilt"></i><span>Submit Receipt</span>
-                    </button>
+                    <form id="pay-upload-form" class="pay-upload pay-bank-upload" method="post" action="<?= e($formAction) ?>"
+                        enctype="multipart/form-data" novalidate>
+                        <input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>">
+                        <input type="hidden" name="action" value="payment_proof">
+                        <input type="file" id="pay-receipt" name="receipt" class="pay-file"
+                            accept="image/jpeg,image/png,image/webp" <?= $canUpload ? '' : 'disabled' ?>>
 
-                    <p class="pay-message <?= $flash ? 'is-' . e($flash['type']) : '' ?>" id="pay-message" role="status" aria-live="polite"><?= e($flash['message'] ?? '') ?></p>
-                </form>
+                        <label for="pay-receipt" id="pay-upload-btn"
+                            class="pay-upload-btn <?= $canUpload ? '' : 'is-disabled' ?>"
+                            role="button" tabindex="<?= $canUpload ? '0' : '-1' ?>" aria-disabled="<?= $canUpload ? 'false' : 'true' ?>">
+                            <i class="ph ph-upload-simple"></i><span>Upload Payment Receipt</span>
+                        </label>
+
+                        <div class="pay-preview" id="pay-preview" <?= $receipt ? '' : 'hidden' ?>>
+                            <div class="pay-preview__thumb" id="pay-thumb"><i class="ph ph-file"></i></div>
+                            <div class="pay-preview__meta">
+                                <span class="pay-preview__name" id="pay-file-name"><?= e($receipt['original'] ?? '') ?></span>
+                                <span class="pay-preview__size" id="pay-file-size"><?= $receipt ? 'Submitted' : '' ?></span>
+                            </div>
+                            <button type="button" class="pay-preview__remove" id="pay-remove" aria-label="Remove file" <?= $receipt ? 'hidden' : '' ?>>
+                                <i class="ph ph-x"></i>
+                            </button>
+                        </div>
+
+                        <button type="submit" class="pay-submit" id="pay-submit" hidden>
+                            <i class="ph ph-paper-plane-tilt"></i><span>Submit Receipt</span>
+                        </button>
+
+                        <p class="pay-message <?= $flash ? 'is-' . e($flash['type']) : '' ?>" id="pay-message" role="status" aria-live="polite"><?= e($flash['message'] ?? '') ?></p>
+                    </form>
+                </div>
             <?php endif; ?>
         </section>
 
@@ -819,6 +824,71 @@ require __DIR__ . '/../includes/header.php';
 
 <script>
 (function() {
+    var locked = false;
+    function lockHistory() {
+        if (!window.history || !window.history.pushState) return;
+        window.history.pushState({ paymentLocked: true }, '', window.location.href);
+        locked = true;
+    }
+
+    lockHistory();
+    ['pointerdown', 'keydown', 'touchstart'].forEach(function(evt) {
+        window.addEventListener(evt, function once() {
+            if (!locked) lockHistory();
+        }, { once: true, passive: true });
+    });
+
+    window.addEventListener('popstate', function() {
+        window.history.pushState({ paymentLocked: true }, '', window.location.href);
+    });
+
+    window.addEventListener('pageshow', function(event) {
+        if (event.persisted) {
+            window.location.reload();
+        }
+    });
+
+    var copyBtn = document.getElementById('pay-copy-account');
+    var accountEl = document.getElementById('pay-bank-account');
+    var copyLabel = document.getElementById('pay-copy-label');
+
+    function copyAccountNumber() {
+        if (!accountEl) return;
+        var acct = accountEl.textContent.trim();
+
+        function showCopied() {
+            if (copyBtn) copyBtn.classList.add('is-copied');
+            if (copyLabel) copyLabel.textContent = 'Copied!';
+            setTimeout(function() {
+                if (copyBtn) copyBtn.classList.remove('is-copied');
+                if (copyLabel) copyLabel.textContent = 'Copy';
+            }, 1800);
+        }
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(acct).then(showCopied).catch(fallbackCopy);
+        } else {
+            fallbackCopy();
+        }
+
+        function fallbackCopy() {
+            var ta = document.createElement('textarea');
+            ta.value = acct;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            try {
+                document.execCommand('copy');
+                showCopied();
+            } catch (e) {}
+            document.body.removeChild(ta);
+        }
+    }
+
+    if (copyBtn) copyBtn.addEventListener('click', copyAccountNumber);
+    if (accountEl) accountEl.addEventListener('click', copyAccountNumber);
+
     var pkgForm = document.getElementById('pay-package-form');
     if (!pkgForm) return;
     var clearBtn = document.getElementById('pay-pkg-clear');
