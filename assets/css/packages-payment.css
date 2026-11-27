@@ -320,8 +320,124 @@
 }
 
 .pay-package-box form {
+  width: 100%;
   margin-top: 8px;
   max-width: 100%;
+}
+
+/* ---- Bank Transfer Card inside Left Box ---- */
+.pay-bank-box {
+  padding: 28px 24px;
+  gap: 8px;
+}
+
+.pay-bank-box > i {
+  font-size: 36px;
+}
+
+.pay-bank-box h2 {
+  font-size: 19px;
+}
+
+.pay-bank-box > p {
+  font-size: 13.5px;
+  color: #6b685f;
+}
+
+.pay-bank-card {
+  width: 100%;
+  margin-top: 10px;
+  text-align: left;
+  background: #faf9f5;
+  border: 1px solid var(--pay-sage);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.pay-bank-card__main {
+  padding: 14px 18px 12px;
+}
+
+.pay-bank-card__bank {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--pay-ink);
+}
+
+.pay-bank-card__label {
+  margin: 0 0 2px;
+  font-size: 12px;
+  color: #6f6c63;
+}
+
+.pay-bank-card__number-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pay-bank-card__account {
+  font-family: var(--pay-font-price);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  color: #000;
+  cursor: pointer;
+  user-select: all;
+}
+
+.pay-bank-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 18px;
+  background: #fff;
+  border-top: 1px solid var(--pay-sage);
+  font-size: 13px;
+  color: var(--pay-ink);
+}
+
+.pay-bank-card__holder {
+  color: #6f6c63;
+}
+
+.pay-bank-card__holder strong,
+.pay-bank-card__foot strong {
+  font-weight: 600;
+  color: var(--pay-ink);
+}
+
+.pay-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 11px;
+  background: #fff;
+  border: 1px solid var(--pay-sage-dark);
+  border-radius: 999px;
+  font: 600 12px var(--pay-font);
+  color: var(--pay-ink);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.pay-copy-btn:hover {
+  background: rgba(163, 178, 161, 0.22);
+}
+
+.pay-copy-btn.is-copied {
+  background: var(--pay-sage);
+  border-color: var(--pay-sage);
+  color: #fff;
+}
+
+.pay-bank-upload {
+  margin-top: 10px;
 }
 
 .pay-badge-row {
@@ -446,18 +562,18 @@
 }
 
 .pay-link {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    width: 100%;
-    gap: 12px;
-    margin-top: 36px;
-    font-size: 18px;
-    font-weight: 500;
-    color: #2f2621;
-    text-decoration: none;
-    cursor: pointer;
-    transition: opacity 0.2s ease, transform 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 100%;
+  gap: 12px;
+  margin-top: 36px;
+  font-size: 18px;
+  font-weight: 500;
+  color: #2f2621;
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
 .pay-link__icon {
@@ -611,6 +727,23 @@
 
   .pay-back {
     font-size: 20px;
+  }
+
+  .pay-bank-box {
+    padding: 24px 18px;
+  }
+
+  .pay-bank-card__main {
+    padding: 12px 14px 10px;
+  }
+
+  .pay-bank-card__account {
+    font-size: 20px;
+  }
+
+  .pay-bank-card__foot {
+    padding: 10px 14px;
+    flex-wrap: wrap;
   }
 
   .pay-steps {

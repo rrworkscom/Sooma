@@ -384,8 +384,7 @@ function bd_attendee_card(
                         type="checkbox"
                         name="attendees[<?= e($i) ?>][not_pregnant]"
                         value="1"
-                        <?= !empty($a['not_pregnant']) ? 'checked' : '' ?>>
-
+                        <?= !empty($a['not_pregnant']) ? 'unchecked' : '' ?>required>
                     <span class="bd-check__box" aria-hidden="false">
                         <i class="ph ph-square"></i>
                         <i class="ph ph-check-square"></i>

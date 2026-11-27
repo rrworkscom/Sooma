@@ -325,6 +325,89 @@
   max-width: 100%;
 }
 
+/* ---- Bank Transfer Card inside Left Box ---- */
+.pay-bank-card {
+  width: 100%;
+  margin-top: 8px;
+  text-align: left;
+  background: #faf9f5;
+  border: 1px solid var(--pay-sage);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.pay-bank-card__main {
+  padding: 20px 22px 16px;
+}
+
+.pay-bank-card__bank {
+  margin: 0 0 6px;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--pay-ink);
+}
+
+.pay-bank-card__label {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: #6f6c63;
+}
+
+.pay-bank-card__account {
+  margin: 0;
+  font-family: var(--pay-font-price);
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  color: #000;
+}
+
+.pay-bank-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 22px;
+  background: #fff;
+  border-top: 1px solid var(--pay-sage);
+  font-size: 13px;
+  color: var(--pay-ink);
+}
+
+.pay-bank-card__holder strong {
+  font-weight: 600;
+}
+
+.pay-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  background: transparent;
+  border: 1px solid var(--pay-sage-dark);
+  border-radius: 999px;
+  font: 600 12px var(--pay-font);
+  color: var(--pay-ink);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.pay-copy-btn:hover {
+  background: rgba(163, 178, 161, 0.22);
+}
+
+.pay-copy-btn.is-copied {
+  background: var(--pay-sage);
+  border-color: var(--pay-sage);
+  color: #fff;
+}
+
+.pay-bank-upload {
+  margin-top: 8px;
+}
+
 /* ---- Package Selector inside Payment Gateway ---- */
 .pay-pkg-selector {
   width: 100%;
@@ -740,6 +823,23 @@
 
   .pay-back {
     font-size: 20px;
+  }
+
+  .pay-package-box {
+    padding: 28px 20px;
+  }
+
+  .pay-bank-card__main {
+    padding: 16px 18px 14px;
+  }
+
+  .pay-bank-card__account {
+    font-size: 24px;
+  }
+
+  .pay-bank-card__foot {
+    padding: 10px 18px;
+    flex-wrap: wrap;
   }
 
   .pay-steps {

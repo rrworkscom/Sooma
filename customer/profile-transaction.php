@@ -368,7 +368,7 @@ $navbar_profile_href = 'profile.php';
 
                                     <div class="txn-action__buttons">
                                         <?php if ($tab === 'unpaid' && !$t['is_package']): ?>
-                                            <a href="./payment.php?booking_id=<?= urlencode((string) $t['id']) ?>"
+                                            <a href="./payment.php?id=<?= urlencode((string) $t['id']) ?>"
                                                 class="btn-show-details">
                                                 Paid Now
                                             </a>

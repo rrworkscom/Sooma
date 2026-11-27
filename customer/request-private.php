@@ -280,7 +280,7 @@ function rp_attendee_card($idx, array $a, bool $removable): void
                     <input type="checkbox"
                         name="attendees[<?= e($i) ?>][not_pregnant]"
                         value="1"
-                        <?= !empty($a['not_pregnant']) ? 'checked' : '' ?> required>
+                        <?= !empty($a['not_pregnant']) ? 'unchecked' : '' ?> required>
                     <span class="bd-check__box" aria-hidden="true">
                         <i class="ph ph-square"></i>
                         <i class="ph ph-check-square"></i>
