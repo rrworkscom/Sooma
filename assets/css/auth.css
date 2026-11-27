@@ -295,7 +295,8 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 9px;
+    gap: 11px;
+    text-decoration: none;
     color: #f7f7f7;
     background: #3d302b;
     font-size: 12px;
@@ -307,13 +308,9 @@ body {
     background: #2c221e;
 }
 
-.google-mark {
-    font-family: Arial, sans-serif;
-    font-size: 21px;
-    line-height: 1;
-    font-weight: 800;
-    color: #4285f4;
-    text-shadow: 1px 0 #34a853, -1px 0 #ea4335;
+.google-icon {
+    flex-shrink: 0;
+    display: block;
 }
 
 .switch-copy {

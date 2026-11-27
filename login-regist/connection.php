@@ -12,8 +12,11 @@ if (is_file($envFile)) {
     }
 }
 
-$debug       = ($_ENV['APP_DEBUG'] ?? '') === '1';
-$databaseUrl = $_ENV['DATABASE_URL'] ?? getenv('DATABASE_URL');
+$debug              = ($_ENV['APP_DEBUG'] ?? '') === '1';
+$databaseUrl        = $_ENV['DATABASE_URL'] ?? getenv('DATABASE_URL');
+$googleClientId     = $_ENV['GOOGLE_CLIENT_ID'] ?? getenv('GOOGLE_CLIENT_ID') ?: '';
+$googleClientSecret = $_ENV['GOOGLE_CLIENT_SECRET'] ?? getenv('GOOGLE_CLIENT_SECRET') ?: '';
+$googleRedirectUri  = $_ENV['GOOGLE_REDIRECT_URI'] ?? getenv('GOOGLE_REDIRECT_URI') ?: 'http://localhost:8000/login-regist/index.php';
 
 if (!$databaseUrl) {
     die('DATABASE_URL belum diatur. Cek file .env');

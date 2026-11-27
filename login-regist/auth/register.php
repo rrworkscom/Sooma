@@ -30,7 +30,6 @@ try {
 
     $pdo->beginTransaction();
 
-    // ambil role customer
     $roleStmt = $pdo->prepare(
         "SELECT role_id
          FROM sooma_wellness.roles
@@ -45,7 +44,6 @@ try {
         throw new Exception('Role customer tidak ditemukan.');
     }
 
-    // simpan data user
     $userStmt = $pdo->prepare(
         "INSERT INTO sooma_wellness.users
             (role_id, name, email, password, encrypted_password, phone_number)
@@ -65,7 +63,6 @@ try {
 
     $userId = $userStmt->fetchColumn();
 
-    // simpan relasi customer dengan user
     $customerStmt = $pdo->prepare(
         "INSERT INTO sooma_wellness.customers (user_id)
          VALUES (:user_id)"
