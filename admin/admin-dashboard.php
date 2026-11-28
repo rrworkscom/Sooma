@@ -275,6 +275,14 @@ $kpiCards = [
                     <dd data-field="name"></dd>
                 </div>
                 <div>
+                    <dt>Schedule</dt>
+                    <dd data-field="schedule"></dd>
+                </div>
+                <div>
+                    <dt>Coach</dt>
+                    <dd data-field="coach"></dd>
+                </div>
+                <div>
                     <dt>Total Payment</dt>
                     <dd class="info-grid__amount" data-field="amount"></dd>
                 </div>
