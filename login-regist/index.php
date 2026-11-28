@@ -173,7 +173,6 @@ if (isset($_GET['code'])) {
                         break;
                 }
                 exit;
-
             } catch (Throwable $e) {
                 if ($pdo->inTransaction()) {
                     $pdo->rollBack();
@@ -306,6 +305,11 @@ require dirname(__DIR__) . '/includes/header.php';
         <div class="form-content <?= $formContentClass ?>">
 
             <?php if ($isRegister): ?>
+                <?php
+                $registerErrors = $_SESSION['register_errors'] ?? [];
+                $registerOld    = $_SESSION['register_old'] ?? [];
+                unset($_SESSION['register_errors'], $_SESSION['register_old']);
+                ?>
 
                 <h1>Create an Account</h1>
                 <p class="subtitle">
@@ -323,47 +327,104 @@ require dirname(__DIR__) . '/includes/header.php';
                     <p class="error-message">Something went wrong. Please try again later.</p>
                 <?php endif; ?>
 
-                <form action="auth/register.php" method="post">
-                    <div class="field">
+                <form id="register-form" action="auth/register.php" method="post" data-validate-url="auth/validate-signup.php" novalidate>
+                    <div class="field <?= !empty($registerErrors['full_name']) ? 'has-error' : '' ?>">
                         <label for="full-name">Full Name</label>
-                        <input id="full-name" name="full_name" type="text" placeholder="Enter your full name" autocomplete="name" required>
+                        <input
+                            id="full-name"
+                            name="full_name"
+                            type="text"
+                            placeholder="Enter your full name"
+                            autocomplete="name"
+                            value="<?= htmlspecialchars($registerOld['full_name'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                            required>
+                        <p id="error-full-name" class="field-feedback <?= !empty($registerErrors['full_name']) ? 'is-error' : 'is-hidden' ?>">
+                            <?= htmlspecialchars($registerErrors['full_name'] ?? '', ENT_QUOTES, 'UTF-8') ?>
+                        </p>
                     </div>
-                    <div class="field">
+
+                    <div class="field <?= !empty($registerErrors['email']) ? 'has-error' : '' ?>">
                         <label for="register-email">Email</label>
-                        <input id="register-email" name="email" type="email" placeholder="Enter your email" autocomplete="email" required>
+                        <input
+                            id="register-email"
+                            name="email"
+                            type="email"
+                            placeholder="Enter your email"
+                            autocomplete="email"
+                            value="<?= htmlspecialchars($registerOld['email'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                            required>
+                        <p id="error-register-email" class="field-feedback <?= !empty($registerErrors['email']) ? 'is-error' : 'is-hidden' ?>">
+                            <?= htmlspecialchars($registerErrors['email'] ?? '', ENT_QUOTES, 'UTF-8') ?>
+                        </p>
                     </div>
-                    <div class="field">
+
+                    <div class="field <?= !empty($registerErrors['phone']) ? 'has-error' : '' ?>">
                         <label for="phone">Phone Number</label>
-                        <input id="phone" name="phone" type="tel" placeholder="Enter your phone number" autocomplete="tel" required>
+                        <input
+                            id="phone"
+                            name="phone"
+                            type="tel"
+                            placeholder="Enter your phone number (e.g., 081234567890)"
+                            autocomplete="tel"
+                            value="<?= htmlspecialchars($registerOld['phone'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                            required>
+                        <p id="error-phone" class="field-feedback <?= !empty($registerErrors['phone']) ? 'is-error' : 'is-hidden' ?>">
+                            <?= htmlspecialchars($registerErrors['phone'] ?? '', ENT_QUOTES, 'UTF-8') ?>
+                        </p>
                     </div>
-                    <div class="field">
+
+                    <div class="field <?= !empty($registerErrors['password']) ? 'has-error' : '' ?>">
                         <label for="register-password">Password</label>
                         <div class="password-input-wrap">
-                            <input id="register-password" name="password" type="password" placeholder="Min. 8 Character" minlength="8" autocomplete="new-password" required>
+                            <input
+                                id="register-password"
+                                name="password"
+                                type="password"
+                                placeholder="Min. 8 Character"
+                                minlength="8"
+                                autocomplete="new-password"
+                                required>
                             <button type="button" class="password-toggle-btn" aria-label="Show password" aria-pressed="false">
                                 <i class="ph ph-eye" aria-hidden="true"></i>
                             </button>
                         </div>
+                        <p id="error-register-password" class="field-feedback <?= !empty($registerErrors['password']) ? 'is-error' : 'is-hidden' ?>">
+                            <?= htmlspecialchars($registerErrors['password'] ?? '', ENT_QUOTES, 'UTF-8') ?>
+                        </p>
                     </div>
-                    <div class="field">
+
+                    <div class="field <?= !empty($registerErrors['password_confirm']) ? 'has-error' : '' ?>">
                         <label for="register-password2">Re-enter Password</label>
                         <div class="password-input-wrap">
-                            <input id="register-password2" name="password_confirm" type="password" placeholder="Re-enter password" minlength="8" autocomplete="new-password" required>
+                            <input
+                                id="register-password2"
+                                name="password_confirm"
+                                type="password"
+                                placeholder="Re-enter password"
+                                minlength="8"
+                                autocomplete="new-password"
+                                required>
                             <button type="button" class="password-toggle-btn" aria-label="Show password" aria-pressed="false">
                                 <i class="ph ph-eye" aria-hidden="true"></i>
                             </button>
                         </div>
+                        <p id="error-register-password2" class="field-feedback <?= !empty($registerErrors['password_confirm']) ? 'is-error' : 'is-hidden' ?>">
+                            <?= htmlspecialchars($registerErrors['password_confirm'] ?? '', ENT_QUOTES, 'UTF-8') ?>
+                        </p>
                     </div>
 
                     <label class="check-row terms-row">
-                        <input type="checkbox" name="terms" required>
+                        <input id="register-terms" type="checkbox" name="terms" required>
                         <span>
                             I agree to Sooma Wellness's Terms &amp; Conditions
                             and Privacy Policy.
                         </span>
                     </label>
+                    <p id="error-terms" class="field-feedback terms-feedback <?= !empty($registerErrors['terms']) ? 'is-error' : 'is-hidden' ?>">
+                        <?= htmlspecialchars($registerErrors['terms'] ?? '', ENT_QUOTES, 'UTF-8') ?>
+                    </p>
 
-                    <button class="primary-button" type="submit">
+                    <button id="register-submit-btn" class="primary-button" type="submit">
                         Sign up
                     </button>
                 </form>
@@ -372,10 +433,10 @@ require dirname(__DIR__) . '/includes/header.php';
 
                 <a class="google-button" href="<?= htmlspecialchars($googleLoginUrl, ENT_QUOTES, 'UTF-8') ?>">
                     <svg class="google-icon" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
-                        <path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"/>
-                        <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09C3.26 21.3 7.31 24 12 24z"/>
-                        <path fill="#FBBC05" d="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.98-3.09z"/>
-                        <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z"/>
+                        <path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z" />
+                        <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09C3.26 21.3 7.31 24 12 24z" />
+                        <path fill="#FBBC05" d="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.98-3.09z" />
+                        <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z" />
                     </svg>
                     <span>Or sign up with Google</span>
                 </a>
@@ -599,10 +660,10 @@ require dirname(__DIR__) . '/includes/header.php';
 
                 <a class="google-button" href="<?= htmlspecialchars($googleLoginUrl, ENT_QUOTES, 'UTF-8') ?>">
                     <svg class="google-icon" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
-                        <path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"/>
-                        <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09C3.26 21.3 7.31 24 12 24z"/>
-                        <path fill="#FBBC05" d="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.98-3.09z"/>
-                        <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z"/>
+                        <path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z" />
+                        <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09C3.26 21.3 7.31 24 12 24z" />
+                        <path fill="#FBBC05" d="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.98-3.09z" />
+                        <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z" />
                     </svg>
                     <span>Or sign in with Google</span>
                 </a>

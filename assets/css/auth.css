@@ -593,3 +593,40 @@ body {
 .change-email-copy a:hover {
     text-decoration: underline;
 }
+
+.field.has-error input {
+    border-color: #dc2626;
+    background-color: #fffafa;
+}
+
+.field.has-error input:focus {
+    border-color: #dc2626;
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.16);
+}
+
+.field.has-valid input {
+    border-color: var(--sage-dark);
+}
+
+.field-feedback {
+    margin: 2px 0 0;
+    font-size: 12.5px;
+    line-height: 1.4;
+    font-weight: 500;
+}
+
+.field-feedback.is-error {
+    color: #b91c1c;
+}
+
+.field-feedback.is-valid {
+    color: #3f523d;
+}
+
+.field-feedback.is-checking {
+    color: var(--muted);
+}
+
+.terms-feedback {
+    margin: -18px 0 20px;
+}
