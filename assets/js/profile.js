@@ -36,13 +36,13 @@
         });
     }
 
-    var avatarBtn   = document.getElementById('btnEditAvatar');
+    var avatarBtn = document.getElementById('btnEditAvatar');
     var avatarInput = document.getElementById('avatarInput');
-    var avatarForm  = document.getElementById('avatarUploadForm');
-    var avatarWrap  = document.querySelector('.profile-card__avatar-wrap');
+    var avatarForm = document.getElementById('avatarUploadForm');
+    var avatarWrap = document.querySelector('.profile-card__avatar-wrap');
 
-    var ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];   
-    var MAX_BYTES     = 2 * 1024 * 1024;                             
+    var ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+    var MAX_BYTES = 2 * 1024 * 1024;
     function previewAvatar(file) {
         var holder = document.querySelector('.profile-card__avatar');
         if (!holder) return;
@@ -100,21 +100,21 @@
     var accountEditors = [];
 
     document.querySelectorAll('.account-item').forEach(function (item) {
-        var view      = item.querySelector('.account-view');
-        var wrap      = item.querySelector('.account-form-wrap');
-        var editBtn   = item.querySelector('.js-edit-account');
+        var view = item.querySelector('.account-view');
+        var wrap = item.querySelector('.account-form-wrap');
+        var editBtn = item.querySelector('.js-edit-account');
         var cancelBtn = item.querySelector('.js-cancel-account');
-        var form      = wrap ? wrap.querySelector('form') : null;
-        var input     = wrap ? wrap.querySelector('input.inline-input') : null;
+        var form = wrap ? wrap.querySelector('form') : null;
+        var input = wrap ? wrap.querySelector('input.inline-input') : null;
         if (!view || !wrap || !editBtn || !cancelBtn || !form || !input) return;
 
-        var key      = item.getAttribute('data-account-field');
+        var key = item.getAttribute('data-account-field');
         var original = input.value;
-        var peekText     = item.querySelector('[data-password-view]');
-        var peekViewBtn  = item.querySelector('.js-peek-view');
+        var peekText = item.querySelector('[data-password-view]');
+        var peekViewBtn = item.querySelector('.js-peek-view');
         var peekInputBtn = wrap.querySelector('.js-peek-input');
-        var PEEK_MASK    = '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022';
-        var viewShown    = false;
+        var PEEK_MASK = '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022';
+        var viewShown = false;
 
         var renderViewPeek = function () {
             if (!peekText) return;
@@ -171,13 +171,13 @@
             input.setAttribute('title', '8–20 digits. May start with + and contain spaces or dashes.');
         } else if (key === 'password') {
             input.setAttribute('autocomplete', 'new-password');
-            input.setAttribute('minlength', '6');
-            input.setAttribute('title', 'At least 6 characters.');
+            input.setAttribute('minlength', '8');
+            input.setAttribute('title', 'At least 8 characters.');
         }
 
         function open() {
             accountEditors.forEach(function (ed) {
-                if (ed.item !== item) ed.close(true, true);  
+                if (ed.item !== item) ed.close(true, true);
             });
             hideViewSecret();
             view.hidden = true;
@@ -203,15 +203,25 @@
                 close(true);
             }
         });
+        if (key === 'password') {
+            form.addEventListener('submit', function (e) {
+                if (input.value.length < 8) {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    showAlert('error', 'Password must be at least 8 characters long.');
+                    input.focus();
+                }
+            });
+        }
         guardSubmit(form);
 
         accountEditors.push({ item: item, close: close });
     });
 
-    var editPersonalBtn   = document.getElementById('btnEditPersonal');
+    var editPersonalBtn = document.getElementById('btnEditPersonal');
     var cancelPersonalBtn = document.getElementById('btnCancelPersonal');
-    var personalView      = document.getElementById('personalViewMode');
-    var personalForm      = document.getElementById('personalEditMode');
+    var personalView = document.getElementById('personalViewMode');
+    var personalForm = document.getElementById('personalEditMode');
 
     if (editPersonalBtn && personalView && personalForm) {
         var firstField = personalForm.querySelector('input:not([type="hidden"]), select');
@@ -224,7 +234,7 @@
         }
 
         function closePersonal() {
-            personalForm.reset();           
+            personalForm.reset();
             personalForm.hidden = true;
             personalView.hidden = false;
             editPersonalBtn.hidden = false;

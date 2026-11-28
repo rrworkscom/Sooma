@@ -4,6 +4,7 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 require_once __DIR__ . '/../login-regist/connection.php';
+require_once __DIR__ . '/../login-regist/auth/profile-password-notif.php';
 
 if (empty($_SESSION['user'])) {
     header('Location: ../login.php');
@@ -75,8 +76,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             }
         } elseif ($field === 'password') {
             $newPass = (string) ($_POST['password'] ?? '');
-            if (strlen($newPass) < 6) {
-                $_SESSION['profile_flash_error'] = 'Password must be at least 6 characters.';
+            if (strlen($newPass) < 8) {
+                $_SESSION['profile_flash_error'] = 'Password must be at least 8 characters long.';
             } else {
                 try {
                     $hash = password_hash($newPass, PASSWORD_DEFAULT);
@@ -84,12 +85,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
                     $stmt = $pdo->prepare(
                         "UPDATE sooma_wellness.users
-                         SET password = :hash, encrypted_password = :enc
-                         WHERE user_id = :id"
+                      SET password = :hash, encrypted_password = :enc
+                      WHERE user_id = :id
+                      RETURNING email, name"
                     );
                     $stmt->execute(['hash' => $hash, 'enc' => $enc, 'id' => $userId]);
+                    $updatedUser = $stmt->fetch(PDO::FETCH_ASSOC);
 
-                    $_SESSION['profile_flash_success'] = 'Password updated successfully.';
+                    if (!$updatedUser) {
+                        throw new RuntimeException('User record not found during password update.');
+                    }
+
+                    $targetEmail = trim((string) ($updatedUser['email'] ?? $_SESSION['user']['email'] ?? ''));
+                    $targetName  = trim((string) ($updatedUser['name'] ?? $_SESSION['user']['name'] ?? 'Member'));
+
+                    $mailSent = ($targetEmail !== '')
+                        ? sw_send_password_changed_email($targetEmail, $targetName)
+                        : false;
+
+                    if ($mailSent) {
+                        $_SESSION['profile_flash_success'] = 'Password updated successfully. A confirmation notification has been sent to ' . $targetEmail . '.';
+                    } else {
+                        $_SESSION['profile_flash_success'] = 'Password updated successfully, but we could not send the email notification right now.';
+                    }
                 } catch (Throwable $e) {
                     error_log('PROFILE PASSWORD UPDATE ERROR: ' . $e->getMessage());
                     $_SESSION['profile_flash_error'] = 'Unable to update the password right now. Please try again.';
@@ -377,7 +395,8 @@ $navbar_profile_href = 'profile.php';
                                             name="password"
                                             class="inline-input"
                                             value=""
-                                            placeholder="Enter new password"
+                                            placeholder="Min. 8 characters"
+                                            minlength="8"
                                             autocomplete="new-password"
                                             required>
                                         <button type="button"
