@@ -217,7 +217,7 @@ $navbar_profile_href = 'profile.php';
     <main class="transaction-page">
 
         <aside class="menu-card" aria-labelledby="menu-title">
-            <h1 class="menu-card__title" id="menu-title">My Private Request</h1>
+            <h1 class="menu-card__title" id="menu-title">My Request</h1>
 
             <nav aria-label="Profile menu">
                 <ul class="menu-list">

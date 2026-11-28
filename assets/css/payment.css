@@ -325,7 +325,6 @@
   max-width: 100%;
 }
 
-/* ---- Bank Transfer Card inside Left Box ---- */
 .pay-bank-card {
   width: 100%;
   margin-top: 8px;
@@ -408,7 +407,6 @@
   margin-top: 8px;
 }
 
-/* ---- Package Selector inside Payment Gateway ---- */
 .pay-pkg-selector {
   width: 100%;
   text-align: left;
@@ -448,7 +446,7 @@
 .pay-pkg-selector__hint {
   font-size: 12px;
   color: #6b685f;
-  margin: 0 0 10px;
+  margin: 0 0 18px;
 }
 
 .pay-pkg-option {
@@ -891,4 +889,10 @@
   .pay-countdown__time {
     font-size: 32px;
   }
+}
+
+.pay-package-box .pay-pkg-selector__hint {
+  font-size: 12px;
+  color: #6b685f;
+  margin: 0 0 14px;
 }

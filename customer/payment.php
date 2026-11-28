@@ -40,30 +40,67 @@ function pay_normalize_category(string $raw): string
     if (str_contains($v, 'yoga')) {
         return 'yoga';
     }
-    return $v;
+    return 'unknown';
+}
+
+function pay_normalize_session_scope(string $raw): string
+{
+    $v = strtolower(trim($raw));
+    if ($v === '' || str_contains($v, 'all')) {
+        return 'all';
+    }
+    if (str_contains($v, 'private group') || str_contains($v, 'semi private') || str_contains($v, 'semi-private')) {
+        return 'private_group';
+    }
+    if (str_contains($v, 'private')) {
+        return 'private';
+    }
+    if (str_contains($v, 'group')) {
+        return 'group';
+    }
+    return 'all';
 }
 
 function pay_is_package_compatible(array $pkg, string $targetCategory, string $targetClassName = ''): bool
 {
-    $pkgKey = 'all';
-    foreach (['category', 'class_category', 'type', 'class_name', 'name'] as $field) {
+    $pkgCat = 'all';
+    foreach (['category', 'class_category', 'class_name', 'name'] as $field) {
         if (!empty($pkg[$field])) {
             $norm = pay_normalize_category((string) $pkg[$field]);
             if (in_array($norm, ['all', 'pilates', 'yoga'], true)) {
-                $pkgKey = $norm;
+                $pkgCat = $norm;
                 break;
             }
         }
     }
 
-    $targetKey = pay_normalize_category($targetCategory);
-    if (!in_array($targetKey, ['pilates', 'yoga'], true)) {
-        $targetKey = pay_normalize_category($targetClassName);
+    $targetCat = pay_normalize_category($targetCategory);
+    if (!in_array($targetCat, ['pilates', 'yoga'], true)) {
+        $targetCat = pay_normalize_category($targetClassName);
     }
-    if ($pkgKey === 'all' || !in_array($targetKey, ['pilates', 'yoga'], true)) {
-        return true;
+
+    if ($pkgCat !== 'all' && in_array($targetCat, ['pilates', 'yoga'], true) && $pkgCat !== $targetCat) {
+        return false;
     }
-    return $pkgKey === $targetKey;
+
+    $pkgScope = 'all';
+    foreach (['name', 'category', 'type'] as $field) {
+        if (!empty($pkg[$field])) {
+            $scope = pay_normalize_session_scope((string) $pkg[$field]);
+            if ($scope !== 'all') {
+                $pkgScope = $scope;
+                break;
+            }
+        }
+    }
+
+    $targetScope = pay_normalize_session_scope($targetCategory . ' ' . $targetClassName);
+
+    if ($pkgScope !== 'all' && $targetScope !== 'all' && $pkgScope !== $targetScope) {
+        return false;
+    }
+
+    return true;
 }
 
 function pay_format_short_date(?string $raw): string
@@ -436,6 +473,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 select up.user_package_id,
                        up.remaining_sessions,
                        coalesce(pkg.package_name, 'Class Package') as name,
+                       coalesce(
+                           nullif(trim(to_jsonb(pkg)->>'variant_label'), ''),
+                           coalesce(pkg.total_sessions, 1)::text || ' Sessions'
+                       ) as type,
                        coalesce(mc.class_name, 'All Classes') as category
                   from sooma_wellness.user_packages up
                   join sooma_wellness.packages pkg on pkg.package_id = up.package_id
@@ -559,19 +600,17 @@ $earliestPayPackageId  = 0;
 if ($isPackage) {
     foreach ($userPackages as $up) {
         $isCompat = pay_is_package_compatible($up, (string) $booking['class_type'], (string) $booking['class_name']);
-        $up['is_compatible'] = $isCompat;
+        if (!$isCompat) {
+            continue;
+        }
+        $up['is_compatible'] = true;
         $compatiblePayPackages[] = $up;
-        if ($isCompat && $earliestPayPackageId === 0 && (int) $up['remaining'] >= $attendeeCnt) {
+        if ($earliestPayPackageId === 0 && (int) $up['remaining'] >= $attendeeCnt) {
             $earliestPayPackageId = (int) $up['user_package_id'];
         }
     }
-    if ($earliestPayPackageId === 0) {
-        foreach ($compatiblePayPackages as $up) {
-            if (!empty($up['is_compatible'])) {
-                $earliestPayPackageId = (int) $up['user_package_id'];
-                break;
-            }
-        }
+    if ($earliestPayPackageId === 0 && !empty($compatiblePayPackages)) {
+        $earliestPayPackageId = (int) $compatiblePayPackages[0]['user_package_id'];
     }
 }
 
@@ -648,24 +687,30 @@ require __DIR__ . '/../includes/header.php';
                         <input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>">
                         <input type="hidden" name="action" value="confirm_package">
 
-                        <?php if (!empty($compatiblePayPackages) && $canUpload): ?>
-                            <div class="pay-pkg-selector" id="pay-pkg-selector">
+                        <?php if (!empty($compatiblePayPackages) && $canUpload):
+                            $hasMultiplePackages = count($compatiblePayPackages) > 1;
+                        ?>
+                            <div class="pay-pkg-selector" id="pay-pkg-selector" data-single="<?= $hasMultiplePackages ? '0' : '1' ?>">
                                 <div class="pay-pkg-selector__head">
                                     <span class="pay-pkg-selector__title">Select Package</span>
-                                    <button type="button" class="pay-pkg-selector__clear" id="pay-pkg-clear" <?= $preselectedUpId > 0 ? '' : 'hidden' ?>>
-                                        Use Earliest (Default)
-                                    </button>
+                                    <?php if ($hasMultiplePackages): ?>
+                                        <button type="button" class="pay-pkg-selector__clear" id="pay-pkg-clear" <?= $preselectedUpId > 0 ? '' : 'hidden' ?>>
+                                            Use Earliest (Default)
+                                        </button>
+                                    <?php endif; ?>
                                 </div>
-                                <p class="pay-pkg-selector__hint">
-                                    Leave unselected to automatically use your earliest purchased compatible package.
-                                </p>
+                                <?php if ($hasMultiplePackages): ?>
+                                    <button type="button" class="pay-pkg-selector__clear" id="pay-pkg-clear" <?= $preselectedUpId > 0 ? '' : 'hidden' ?>>
+                                        Use Earliest Package
+                                    </button>
+                                <?php endif; ?>
                                 <?php foreach ($compatiblePayPackages as $up):
                                     $upId       = (int) $up['user_package_id'];
                                     $isCompat   = !empty($up['is_compatible']);
                                     $hasEnough  = (int) $up['remaining'] >= $attendeeCnt;
                                     $canPick    = $isCompat && $hasEnough;
                                     $isEarliest = ($upId === $earliestPayPackageId);
-                                    $isChecked  = ($canPick && $upId === $preselectedUpId);
+                                    $isChecked  = ($canPick && ($upId === $preselectedUpId || !$hasMultiplePackages));
                                 ?>
                                     <label class="pay-pkg-option<?= !$canPick ? ' is-disabled' : '' ?>">
                                         <input type="radio"
@@ -678,7 +723,7 @@ require __DIR__ . '/../includes/header.php';
                                             <span>
                                                 <span class="pay-pkg-option__name">
                                                     <?= e($up['name']) ?>
-                                                    <?php if ($isEarliest): ?>
+                                                    <?php if ($isEarliest && $hasMultiplePackages): ?>
                                                         <span class="pay-pkg-option__tag">Earliest Purchased</span>
                                                     <?php endif; ?>
                                                 </span>
@@ -701,7 +746,7 @@ require __DIR__ . '/../includes/header.php';
                         <?php endif; ?>
 
                         <button type="submit" class="pay-upload-btn" <?= $canUpload ? '' : 'disabled' ?>>
-                            <i class="ph ph-check-circle"></i><span>Confirm Booking</span>
+                            <i class="ph ph-check-circle"></i><span><?= $status === 'confirmed' ? 'Processed' : 'Confirm Booking' ?></span>
                         </button>
                     </form>
                     <p class="pay-message <?= $flash ? 'is-' . e($flash['type']) : '' ?>" id="pay-message" role="status" aria-live="polite"><?= e($flash['message'] ?? '') ?></p>
@@ -823,106 +868,123 @@ require __DIR__ . '/../includes/header.php';
 </main>
 
 <script>
-(function() {
-    var locked = false;
-    function lockHistory() {
-        if (!window.history || !window.history.pushState) return;
-        window.history.pushState({ paymentLocked: true }, '', window.location.href);
-        locked = true;
-    }
+    (function() {
+        var locked = false;
 
-    lockHistory();
-    ['pointerdown', 'keydown', 'touchstart'].forEach(function(evt) {
-        window.addEventListener(evt, function once() {
-            if (!locked) lockHistory();
-        }, { once: true, passive: true });
-    });
-
-    window.addEventListener('popstate', function() {
-        window.history.pushState({ paymentLocked: true }, '', window.location.href);
-    });
-
-    window.addEventListener('pageshow', function(event) {
-        if (event.persisted) {
-            window.location.reload();
-        }
-    });
-
-    var copyBtn = document.getElementById('pay-copy-account');
-    var accountEl = document.getElementById('pay-bank-account');
-    var copyLabel = document.getElementById('pay-copy-label');
-
-    function copyAccountNumber() {
-        if (!accountEl) return;
-        var acct = accountEl.textContent.trim();
-
-        function showCopied() {
-            if (copyBtn) copyBtn.classList.add('is-copied');
-            if (copyLabel) copyLabel.textContent = 'Copied!';
-            setTimeout(function() {
-                if (copyBtn) copyBtn.classList.remove('is-copied');
-                if (copyLabel) copyLabel.textContent = 'Copy';
-            }, 1800);
+        function lockHistory() {
+            if (!window.history || !window.history.pushState) return;
+            window.history.pushState({
+                paymentLocked: true
+            }, '', window.location.href);
+            locked = true;
         }
 
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(acct).then(showCopied).catch(fallbackCopy);
-        } else {
-            fallbackCopy();
-        }
+        lockHistory();
+        ['pointerdown', 'keydown', 'touchstart'].forEach(function(evt) {
+            window.addEventListener(evt, function once() {
+                if (!locked) lockHistory();
+            }, {
+                once: true,
+                passive: true
+            });
+        });
 
-        function fallbackCopy() {
-            var ta = document.createElement('textarea');
-            ta.value = acct;
-            ta.style.position = 'fixed';
-            ta.style.opacity = '0';
-            document.body.appendChild(ta);
-            ta.select();
-            try {
-                document.execCommand('copy');
-                showCopied();
-            } catch (e) {}
-            document.body.removeChild(ta);
-        }
-    }
+        window.addEventListener('popstate', function() {
+            window.history.pushState({
+                paymentLocked: true
+            }, '', window.location.href);
+        });
 
-    if (copyBtn) copyBtn.addEventListener('click', copyAccountNumber);
-    if (accountEl) accountEl.addEventListener('click', copyAccountNumber);
-
-    var pkgForm = document.getElementById('pay-package-form');
-    if (!pkgForm) return;
-    var clearBtn = document.getElementById('pay-pkg-clear');
-    var radios = Array.prototype.slice.call(pkgForm.querySelectorAll('input[name="user_package_id"]'));
-
-    function syncPayPackageHighlight() {
-        var checked = radios.find(function(r) { return r.checked && !r.disabled; });
-        var earliest = radios.find(function(r) { return !r.disabled && r.dataset.earliest === '1'; })
-            || radios.find(function(r) { return !r.disabled; });
-
-        radios.forEach(function(r) {
-            var wrap = r.closest('.pay-pkg-option');
-            if (wrap) {
-                wrap.classList.toggle('is-auto-default', !checked && r === earliest);
+        window.addEventListener('pageshow', function(event) {
+            if (event.persisted) {
+                window.location.reload();
             }
         });
-        if (clearBtn) {
-            clearBtn.hidden = !checked;
+
+        var copyBtn = document.getElementById('pay-copy-account');
+        var accountEl = document.getElementById('pay-bank-account');
+        var copyLabel = document.getElementById('pay-copy-label');
+
+        function copyAccountNumber() {
+            if (!accountEl) return;
+            var acct = accountEl.textContent.trim();
+
+            function showCopied() {
+                if (copyBtn) copyBtn.classList.add('is-copied');
+                if (copyLabel) copyLabel.textContent = 'Copied!';
+                setTimeout(function() {
+                    if (copyBtn) copyBtn.classList.remove('is-copied');
+                    if (copyLabel) copyLabel.textContent = 'Copy';
+                }, 1800);
+            }
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(acct).then(showCopied).catch(fallbackCopy);
+            } else {
+                fallbackCopy();
+            }
+
+            function fallbackCopy() {
+                var ta = document.createElement('textarea');
+                ta.value = acct;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                try {
+                    document.execCommand('copy');
+                    showCopied();
+                } catch (e) {}
+                document.body.removeChild(ta);
+            }
         }
-    }
 
-    radios.forEach(function(r) {
-        r.addEventListener('change', syncPayPackageHighlight);
-    });
+        if (copyBtn) copyBtn.addEventListener('click', copyAccountNumber);
+        if (accountEl) accountEl.addEventListener('click', copyAccountNumber);
 
-    if (clearBtn) {
-        clearBtn.addEventListener('click', function() {
-            radios.forEach(function(r) { r.checked = false; });
-            syncPayPackageHighlight();
+        var pkgForm = document.getElementById('pay-package-form');
+        if (!pkgForm) return;
+        var clearBtn = document.getElementById('pay-pkg-clear');
+        var radios = Array.prototype.slice.call(pkgForm.querySelectorAll('input[name="user_package_id"]'));
+        var isSinglePackage = radios.length <= 1;
+
+        function syncPayPackageHighlight() {
+            var checked = radios.find(function(r) {
+                return r.checked && !r.disabled;
+            });
+            var earliest = radios.find(function(r) {
+                    return !r.disabled && r.dataset.earliest === '1';
+                }) ||
+                radios.find(function(r) {
+                    return !r.disabled;
+                });
+
+            radios.forEach(function(r) {
+                var wrap = r.closest('.pay-pkg-option');
+                if (wrap) {
+                    wrap.classList.toggle('is-auto-default', !checked && r === earliest);
+                }
+            });
+            if (clearBtn) {
+                clearBtn.hidden = isSinglePackage || !checked;
+            }
+        }
+
+        radios.forEach(function(r) {
+            r.addEventListener('change', syncPayPackageHighlight);
         });
-    }
 
-    syncPayPackageHighlight();
-})();
+        if (clearBtn && !isSinglePackage) {
+            clearBtn.addEventListener('click', function() {
+                radios.forEach(function(r) {
+                    r.checked = false;
+                });
+                syncPayPackageHighlight();
+            });
+        }
+
+        syncPayPackageHighlight();
+    })();
 </script>
 <?php require __DIR__ . '/../includes/footer.php'; ?>
 <script src="../assets/js/payment.js"></script>

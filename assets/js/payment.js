@@ -54,6 +54,16 @@
     message.className = 'pay-message' + (type ? ' is-' + type : '');
   }
 
+  function setButtonLabel(btn, text) {
+    if (!btn) return;
+    var span = btn.querySelector('span');
+    if (span) {
+      span.textContent = text;
+    } else {
+      btn.textContent = text;
+    }
+  }
+
   function setPackageControlsDisabled(disabled) {
     if (!packageBox) return;
     packageBox.querySelectorAll('button, select, input').forEach(function (el) {
@@ -114,6 +124,9 @@
       stopTimer();
       countdown.textContent = '--:--';
       countdown.classList.remove('is-warning');
+      if (next === 'confirmed' && packageSubmitBtn) {
+        setButtonLabel(packageSubmitBtn, 'Processed');
+      }
       enableFinishLink(next);
     }
   }
@@ -258,9 +271,11 @@
       fd.set('booking_id', root.dataset.bookingId);
     }
 
-    var origLabel = packageSubmitBtn ? packageSubmitBtn.textContent : '';
+    var spanEl = packageSubmitBtn ? packageSubmitBtn.querySelector('span') : null;
+    var origLabel = spanEl ? spanEl.textContent : (packageSubmitBtn ? packageSubmitBtn.textContent : 'Confirm Booking');
+
     setPackageControlsDisabled(true);
-    if (packageSubmitBtn) packageSubmitBtn.textContent = 'Processing...';
+    setButtonLabel(packageSubmitBtn, 'Processing...');
 
     fetch(endpoint, {
       method: 'POST',
@@ -280,16 +295,17 @@
         } else {
           if (data.status === 'expired') {
             setStatus('expired');
+            setButtonLabel(packageSubmitBtn, origLabel);
           } else {
             setPackageControlsDisabled(false);
-            if (packageSubmitBtn) packageSubmitBtn.textContent = origLabel;
+            setButtonLabel(packageSubmitBtn, origLabel);
           }
           say(data.message || 'Unable to pay using this package.', 'error');
         }
       })
       .catch(function () {
         setPackageControlsDisabled(false);
-        if (packageSubmitBtn) packageSubmitBtn.textContent = origLabel;
+        setButtonLabel(packageSubmitBtn, origLabel);
         say('Network error. Please check your connection and try again.', 'error');
       });
   }
