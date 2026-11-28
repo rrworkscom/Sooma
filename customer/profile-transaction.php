@@ -34,7 +34,6 @@ try {
     error_log('[profile-transaction sync] ' . $e->getMessage());
 }
 
-// 1. Paksa update ke 'expired' untuk semua booking waiting_payment yang waktunya sudah habis (30 menit)
 $expireStmt = $pdo->prepare("
     update sooma_wellness.bookings b
        set booking_status = 'expired',
@@ -47,7 +46,6 @@ $expireStmt = $pdo->prepare("
 ");
 $expireStmt->execute([':user_id' => $userId]);
 
-// Endpoint ringan untuk dipanggil otomatis oleh JS saat countdown menyentuh 00:00
 if (isset($_GET['sync_expire']) && $_GET['sync_expire'] === '1') {
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode(['ok' => true, 'updated' => $expireStmt->rowCount()]);
@@ -56,21 +54,33 @@ if (isset($_GET['sync_expire']) && $_GET['sync_expire'] === '1') {
 
 $stmt = $pdo->prepare("
     select b.booking_id as id,
-           coalesce(b.booking_code, 'BK-' || lpad(b.booking_id::text, 4, '0')) as code,
-           b.booking_status,
-           coalesce(b.expires_at, b.booked_at + interval '30 minutes') as effective_expires_at,
-           greatest(
-               0,
-               ceil(extract(epoch from (coalesce(b.expires_at, b.booked_at + interval '30 minutes') - clock_timestamp())))
-           )::int as remaining_seconds,
-           coalesce(nullif(to_jsonb(b)->>'private_request_id', ''), nullif(to_jsonb(b)->>'request_id', ''), '') as private_request_id,
-           (
-               lower(coalesce(nullif(to_jsonb(b)->>'class_type', ''), cs.class_type, '')) like '%private%'
-               or lower(coalesce(mc.class_name, '')) like '%private%'
-               or upper(ltrim(coalesce(b.booking_code, ''), '#')) like 'REQ%'
-               or coalesce(nullif(to_jsonb(b)->>'private_request_id', ''), nullif(to_jsonb(b)->>'request_id', ''), '') <> ''
-           ) as is_private_req,
-           p.payment_proof,
+        coalesce(b.expires_at, b.booked_at + interval '30 minutes') as effective_expires_at,
+        greatest(
+            0,
+            ceil(extract(epoch from (coalesce(b.expires_at, b.booked_at + interval '30 minutes') - clock_timestamp())))
+        )::int as remaining_seconds,
+        coalesce(nullif(to_jsonb(b)->>'private_request_id', ''), nullif(to_jsonb(b)->>'request_id', ''), '') as private_request_id,
+        (
+            lower(coalesce(nullif(to_jsonb(b)->>'class_type', ''), cs.class_type, '')) like '%private%'
+            or lower(coalesce(mc.class_name, '')) like '%private%'
+            or upper(ltrim(coalesce(b.booking_code, ''), '#')) like 'REQ%'
+            or coalesce(nullif(to_jsonb(b)->>'private_request_id', ''), nullif(to_jsonb(b)->>'request_id', ''), '') <> ''
+            or exists (
+                select 1
+                from sooma_wellness.request_classes rc
+                where rc.customer_id = b.customer_id
+                    and (
+                        to_jsonb(rc)->>'booking_id' = b.booking_id::text
+                        or to_jsonb(rc)->>'schedule_id' = cs.schedule_id::text
+                        or (
+                            rc.class_id = cs.class_id
+                            and rc.preferred_date = cs.schedule_date
+                            and rc.preferred_time = cs.start_time
+                        )
+                    )
+            )
+        ) as is_private_req,
+        p.payment_proof,
            p.verification_status,
            coalesce(nullif(to_jsonb(p)->>'admin_note', ''), nullif(to_jsonb(p)->>'rejection_reason', ''), '') as admin_note,
            cs.schedule_date as date,
