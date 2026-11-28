@@ -384,14 +384,17 @@ function bd_attendee_card(
                         type="checkbox"
                         name="attendees[<?= e($i) ?>][not_pregnant]"
                         value="1"
-                        <?= !empty($a['not_pregnant']) ? 'unchecked' : '' ?>required>
-                    <span class="bd-check__box" aria-hidden="false">
+                        data-not-pregnant
+                        <?= !empty($a['not_pregnant']) ? 'checked' : '' ?>
+                        required>
+                    <span class="bd-check__box" aria-hidden="true">
                         <i class="ph ph-square"></i>
                         <i class="ph ph-check-square"></i>
                     </span>
 
                     <span>Participant is <strong>not</strong> currently pregnant</span>
                 </label>
+                <?php if ($err('not_pregnant')): ?><div class="bd-error"><?= e($err('not_pregnant')) ?></div><?php endif; ?>
             </div>
         </div>
     </div>
@@ -641,7 +644,7 @@ $defaultAttendees = [[
     'phone'        => $currentUser['phone'],
     'email'        => $currentUser['email'],
     'medical'      => '',
-    'not_pregnant' => '1',
+    'not_pregnant' => '',
 ]];
 
 for ($k = 1; $k < $heldQty; $k++) {
@@ -650,7 +653,7 @@ for ($k = 1; $k < $heldQty; $k++) {
         'phone'        => '',
         'email'        => '',
         'medical'      => '',
-        'not_pregnant' => '1',
+        'not_pregnant' => '',
     ];
 }
 
@@ -741,6 +744,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $data        = bd_parse_submission($_POST);
     $errors      = bd_validate_submission($data, $packages);
     $voucherCode = strtoupper(trim((string) ($_POST['voucher_code'] ?? '')));
+
+    foreach ($data['attendees'] as $idx => $attItem) {
+        if (empty($attItem['not_pregnant'])) {
+            $errors["attendees.{$idx}.not_pregnant"] = 'Please check this box if you want to proceed.';
+        }
+    }
 
     if ($data['payment_method'] === 'package') {
         $attendeeCnt = count($data['attendees']);
@@ -914,6 +923,24 @@ require __DIR__ . '/../includes/header.php';
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caladea:ital@0;1&display=swap">
 <link rel="stylesheet" href="../assets/css/booking-detail.css">
+<style>
+    .bd-check {
+        position: relative;
+    }
+    .bd-check input[type="checkbox"] {
+        display: inline-block !important;
+        position: absolute;
+        left: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 18px;
+        height: 18px;
+        margin: 0;
+        opacity: 0;
+        cursor: pointer;
+        z-index: 2;
+    }
+</style>
 
 <main class="bd-page">
     <a href="<?= e($timetableUrl) ?>" class="bd-back" id="bd-back-btn">
@@ -927,6 +954,7 @@ require __DIR__ . '/../includes/header.php';
         data-price="<?= (int) $class['price'] ?>"
         data-max="<?= $maxAttendees ?>"
         data-limit="<?= $maxBookingLimit ?>"
+        data-total-slots="<?= (int) $class['slots_total'] ?>"
         data-full="<?= $classFull ? '1' : '0' ?>"
         data-class-category="<?= e($class['category']) ?>"
         data-class-name="<?= e($class['class_name']) ?>"
@@ -1125,7 +1153,7 @@ require __DIR__ . '/../includes/header.php';
                 </section>
 
                 <div class="bd-actions">
-                    <button type="submit" class="bd-continue" id="bd-continue">
+                    <button type="submit" class="bd-continue" id="bd-continue" disabled>
                         <span>Continue Payment</span>
                         <i class="bi bi-arrow-right-circle-fill"></i>
                     </button>

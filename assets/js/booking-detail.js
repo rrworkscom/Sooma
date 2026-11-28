@@ -320,3 +320,571 @@ document.addEventListener('DOMContentLoaded', () => {
         calculateAndRender();
     }
 });
+
+
+document.addEventListener('DOMContentLoaded', () => {
+    var form = document.getElementById('bd-form');
+    if (!form) return;
+
+    var price = parseInt(form.dataset.price, 10) || 0;
+    var bookingLimit = parseInt(form.dataset.limit, 10) || 2;
+    var max = Math.min(bookingLimit, parseInt(form.dataset.max, 10) || 1);
+    var totalSlots = parseInt(form.dataset.totalSlots, 10) || 0;
+    var list = document.getElementById('bd-attendee-list');
+    var addBtn = document.getElementById('bd-add-attendee');
+    var backBtn = document.getElementById('bd-back-btn');
+    var slotsBadge = document.getElementById('bd-slots-badge');
+    var scheduleInput = form.querySelector('input[name="schedule_id"]');
+    var scheduleId = scheduleInput ? scheduleInput.value : '';
+    var tpl = document.getElementById('bd-attendee-template');
+    var subtotalEl = document.getElementById('bd-subtotal');
+    var totalEl = document.getElementById('bd-total');
+    var totalBox = document.getElementById('bd-total-box');
+    var packagesBox = document.getElementById('bd-packages');
+    var packagesHint = document.getElementById('bd-packages-hint');
+    var clearPkgBtn = document.getElementById('bd-clear-package');
+    var packageError = document.getElementById('bd-package-error');
+    var agree = document.getElementById('bd-agree');
+    var continueBtn = document.getElementById('bd-continue');
+    var continueLabel = continueBtn.querySelector('span');
+    var continueText = continueLabel ? continueLabel.textContent : 'Continue Payment';
+    var endpoint = form.dataset.endpoint;
+    var checking = false;
+
+    var slotModal = document.getElementById('bd-slot-modal');
+    var slotTitle = document.getElementById('bd-slot-title');
+    var slotText = document.getElementById('bd-slot-text');
+    var slotBack = document.getElementById('bd-slot-back');
+    var slotRefresh = document.getElementById('bd-slot-refresh');
+    var lastFocus = null;
+    var nextIndex = list.querySelectorAll('[data-attendee]').length;
+
+    function normalizeProgram(raw) {
+        var v = String(raw || '').toLowerCase().trim();
+        if (!v || v === 'all' || v === 'all classes' || v.indexOf('all class') > -1) return 'all';
+        if (v.indexOf('pilates') > -1 || v.indexOf('reformer') > -1) return 'reformer_pilates';
+        if (v.indexOf('yoga') > -1) return 'regular_yoga';
+        return v;
+    }
+
+    function normalizeClassType(raw) {
+        var v = String(raw || '').toLowerCase().trim();
+        if (!v) return '';
+        if (v.indexOf('private group') > -1 || v.indexOf('private_group') > -1 || v.indexOf('private-group') > -1) {
+            return 'private_group';
+        }
+        if (v.indexOf('private') > -1) return 'private';
+        if (v.indexOf('group') > -1) return 'group';
+        if (v === 'all' || v === 'all types' || v.indexOf('all type') > -1) return 'all';
+        return '';
+    }
+
+    function resolveTargetClassType(attendeeQty) {
+        var baseType = normalizeClassType(form.dataset.classType || '');
+        if (!baseType) {
+            baseType = normalizeClassType(form.dataset.className || '');
+        }
+        if (baseType === 'private') {
+            return attendeeQty > 1 ? 'private_group' : 'private';
+        }
+        if (baseType === 'private_group') {
+            return 'private_group';
+        }
+        return 'group';
+    }
+
+    function getTargetFullLabel(resolvedType) {
+        var progKey = normalizeProgram(form.dataset.classCategory || form.dataset.className || '');
+        var progLabel = progKey === 'reformer_pilates' ?
+            'Reformer Pilates' :
+            (progKey === 'regular_yoga' ? 'Regular Yoga' : (form.dataset.classCategory || form.dataset.className || ''));
+        var typeLabel = resolvedType === 'private_group' ?
+            'Private Group' :
+            (resolvedType === 'private' ? 'Private' : 'Group');
+        return (typeLabel + ' ' + progLabel).trim();
+    }
+
+    function syncPackageCompatibility(requiredSessions) {
+        var targetProg = normalizeProgram(form.dataset.classCategory || form.dataset.className || '');
+        var targetType = resolveTargetClassType(requiredSessions);
+        var targetLabel = getTargetFullLabel(targetType);
+        var radios = Array.prototype.slice.call(form.querySelectorAll('input[name="package_id"]'));
+        if (!radios.length) return null;
+
+        var checkedRadio = null;
+        var compatibleRadios = [];
+        var firstCompatible = null;
+        var firstEnoughCompatible = null;
+
+        radios.forEach(function (r) {
+            var pkgProg = normalizeProgram(r.dataset.program || r.dataset.pkgLabel || '');
+            var pkgType = normalizeClassType(r.dataset.classType || r.dataset.pkgLabel || '') || 'group';
+
+            var progCompat = (pkgProg === 'all' || !targetProg || targetProg === 'all' || pkgProg === targetProg);
+            var typeCompat = (pkgType === 'all' || pkgType === targetType);
+            var compatible = progCompat && typeCompat;
+
+            var rem = parseInt(r.dataset.remaining, 10) || 0;
+            r.disabled = !compatible;
+
+            var wrap = r.closest('.bd-package');
+            if (wrap) {
+                wrap.classList.toggle('is-incompatible', !compatible);
+                wrap.classList.remove('is-auto-default');
+                var lockEl = wrap.querySelector('.bd-package__lock');
+                if (lockEl) {
+                    lockEl.textContent = 'Not applicable for ' + targetLabel;
+                    lockEl.hidden = compatible;
+                }
+                var tagEl = wrap.querySelector('[data-earliest-tag]');
+                if (tagEl) {
+                    tagEl.hidden = true;
+                }
+            }
+
+            if (compatible) {
+                compatibleRadios.push(r);
+                if (!firstCompatible) firstCompatible = r;
+                if (!firstEnoughCompatible && rem >= requiredSessions) firstEnoughCompatible = r;
+            }
+
+            if (r.checked) {
+                if (!compatible) {
+                    r.checked = false;
+                } else {
+                    checkedRadio = r;
+                }
+            }
+        });
+
+        var hasMultipleSamePackages = compatibleRadios.length > 1;
+        if (hasMultipleSamePackages && compatibleRadios[0]) {
+            var firstWrap = compatibleRadios[0].closest('.bd-package');
+            var firstTag = firstWrap ? firstWrap.querySelector('[data-earliest-tag]') : null;
+            if (firstTag) {
+                firstTag.hidden = false;
+            }
+        } else if (compatibleRadios.length === 1) {
+            compatibleRadios[0].checked = true;
+            checkedRadio = compatibleRadios[0];
+        }
+
+        if (packagesHint) {
+            packagesHint.textContent = hasMultipleSamePackages ?
+                'Select the package you want to use, or leave unselected to automatically use your earliest purchased package.' :
+                'Your compatible package is selected automatically.';
+        }
+
+        var effectiveRadio = checkedRadio || firstEnoughCompatible || firstCompatible;
+        if (!checkedRadio && effectiveRadio) {
+            var defWrap = effectiveRadio.closest('.bd-package');
+            if (defWrap) defWrap.classList.add('is-auto-default');
+        }
+        if (clearPkgBtn) {
+            clearPkgBtn.textContent = 'Use Earliest Package';
+            clearPkgBtn.hidden = !hasMultipleSamePackages || !checkedRadio;
+        }
+        return effectiveRadio;
+    }
+
+    function updateAttendeeTitles() {
+        list.querySelectorAll('[data-attendee]').forEach(function (card, index) {
+            var title = card.querySelector('.js-attendee-title');
+            var nameInput = card.querySelector('[data-attendee-name]');
+            if (title) {
+                var attendeeName = nameInput ? nameInput.value.trim() : '';
+                title.textContent = attendeeName || 'Attendee ' + (index + 1);
+            }
+        });
+    }
+
+    function method() {
+        var r = form.querySelector('input[name="payment_method"]:checked');
+        return r ? r.value : 'dropin';
+    }
+
+    function count() {
+        return list.querySelectorAll('[data-attendee]').length;
+    }
+
+    function resolveEffectivePackageRadio() {
+        return syncPackageCompatibility(count());
+    }
+
+    function pkgRemaining() {
+        var r = resolveEffectivePackageRadio();
+        return r ? parseInt(r.dataset.remaining, 10) : 0;
+    }
+
+    function hasCompatiblePackage() {
+        return form.querySelectorAll('input[name="package_id"]:not(:disabled)').length > 0;
+    }
+
+    function refresh() {
+        var n = count(),
+            isPackage = method() === 'package';
+        var effectivePkg = syncPackageCompatibility(n);
+        var targetLabel = getTargetFullLabel(resolveTargetClassType(n));
+        var amount = '<em>Rp</em>' + (price * n).toLocaleString('en-US');
+        subtotalEl.innerHTML = amount;
+        totalEl.innerHTML = amount;
+        totalBox.hidden = isPackage;
+        packagesBox.hidden = !isPackage;
+
+        if (typeof window.bdRefreshVoucher === 'function') {
+            window.bdRefreshVoucher(price, n, isPackage);
+        }
+
+        var pkgInvalid = false;
+        if (isPackage) {
+            if (!hasCompatiblePackage() || !effectivePkg) {
+                packageError.textContent = 'No compatible active package available for ' + targetLabel + '.';
+                pkgInvalid = true;
+            } else if (pkgRemaining() < n) {
+                packageError.textContent = 'Your package does not have enough remaining sessions.';
+                pkgInvalid = true;
+            } else {
+                packageError.textContent = '';
+            }
+        } else {
+            packageError.textContent = '';
+        }
+
+        addBtn.disabled = form.dataset.full === '1' || n >= max || n >= bookingLimit;
+        if (max === 1) {
+            addBtn.title = 'Only 1 spot left in this class';
+        } else if (n >= bookingLimit) {
+            addBtn.title = 'Maximum ' + bookingLimit + ' participants per booking';
+        } else {
+            addBtn.title = '';
+        }
+
+        var isVoucherInvalid = !isPackage && typeof window.bdIsVoucherValid === 'function' && !window.bdIsVoucherValid();
+        continueBtn.disabled = checking || !agree.checked || form.dataset.full === '1' || isVoucherInvalid || pkgInvalid;
+    }
+
+    if (clearPkgBtn) {
+        clearPkgBtn.addEventListener('click', function () {
+            form.querySelectorAll('input[name="package_id"]').forEach(function (r) {
+                r.checked = false;
+            });
+            refresh();
+        });
+    }
+
+    function setOpen(card, open) {
+        var btn = card.querySelector('[data-toggle-attendee]');
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        document.getElementById(btn.getAttribute('aria-controls')).hidden = !open;
+    }
+
+    async function syncHoldQuantity(newQty) {
+        var fd = new FormData();
+        fd.append('action', 'update_count');
+        fd.append('schedule_id', scheduleId);
+        fd.append('qty', String(newQty));
+
+        var res = await fetch('api-hold-slot.php', {
+            method: 'POST',
+            body: fd,
+            credentials: 'same-origin'
+        });
+        return await res.json();
+    }
+
+    addBtn.addEventListener('click', async function () {
+        var nextQty = count() + 1;
+        if (count() >= max || nextQty > bookingLimit || addBtn.disabled) return;
+
+        addBtn.disabled = true;
+        var origText = addBtn.textContent;
+        addBtn.textContent = 'Reserving spot...';
+
+        try {
+            var result = await syncHoldQuantity(nextQty);
+            if (result.status !== 'ok') {
+                alert(result.message || 'No more spots available in this class.');
+                max = count();
+                addBtn.textContent = origText;
+                refresh();
+                return;
+            }
+
+            if (slotsBadge) {
+                slotsBadge.textContent = result.remaining_others + ' / ' + totalSlots + ' Left';
+            }
+
+            list.querySelectorAll('[data-attendee]').forEach(function (c) {
+                setOpen(c, false);
+            });
+
+            list.insertAdjacentHTML(
+                'beforeend',
+                tpl.innerHTML.split('__INDEX__').join(String(nextIndex++))
+            );
+
+            updateAttendeeTitles();
+        } catch (err) {
+            console.error(err);
+            alert('Failed to reserve additional spot. Please try again.');
+        } finally {
+            addBtn.textContent = origText;
+            refresh();
+        }
+    });
+
+    list.addEventListener('click', async function (e) {
+        var toggle = e.target.closest('[data-toggle-attendee]');
+        if (toggle) {
+            setOpen(toggle.closest('[data-attendee]'), toggle.getAttribute('aria-expanded') !== 'true');
+            return;
+        }
+        var rm = e.target.closest('[data-remove-attendee]');
+        if (rm) {
+            rm.closest('[data-attendee]').remove();
+            updateAttendeeTitles();
+            refresh();
+
+            try {
+                var result = await syncHoldQuantity(count());
+                if (result.status === 'ok' && slotsBadge) {
+                    slotsBadge.textContent = result.remaining_others + ' / ' + totalSlots + ' Left';
+                }
+            } catch (err) {
+                console.error('Failed to release hold:', err);
+            }
+        }
+    });
+
+    if (backBtn) {
+        backBtn.addEventListener('click', async function (e) {
+            e.preventDefault();
+            var targetHref = backBtn.getAttribute('href');
+            try {
+                var fd = new FormData();
+                fd.append('action', 'release');
+                await fetch('api-hold-slot.php', {
+                    method: 'POST',
+                    body: fd,
+                    credentials: 'same-origin',
+                    keepalive: true
+                });
+            } catch (err) {
+                console.error(err);
+            }
+            window.location.href = targetHref;
+        });
+    }
+
+    list.addEventListener('input', function (e) {
+        var input = e.target;
+        if (input.type === 'tel') {
+            input.value = input.value.replace(/[^\d+]/g, '');
+        }
+        if (input.matches('[data-attendee-name]')) {
+            updateAttendeeTitles();
+        }
+    });
+
+    form.addEventListener('change', function (e) {
+        if (e.target.matches('input[name="payment_method"], input[name="package_id"], #bd-agree')) {
+            refresh();
+        }
+    });
+
+    document.addEventListener('bd:voucher-changed', function () {
+        refresh();
+    });
+
+    function setChecking(on) {
+        checking = on;
+        continueBtn.classList.toggle('is-loading', on);
+        continueBtn.setAttribute('aria-busy', on ? 'true' : 'false');
+
+        var spinner = continueBtn.querySelector('.bd-spinner');
+        if (on) {
+            if (!spinner) {
+                spinner = document.createElement('span');
+                spinner.className = 'bd-spinner';
+                spinner.setAttribute('aria-hidden', 'true');
+                continueBtn.insertBefore(spinner, continueBtn.firstChild);
+            }
+            if (continueLabel) continueLabel.textContent = 'Verifying slot & price...';
+        } else {
+            if (spinner) spinner.remove();
+            if (continueLabel) continueLabel.textContent = continueText;
+        }
+        var isInvalidPackage = method() === 'package' && (!resolveEffectivePackageRadio() || pkgRemaining() < count());
+        var isVoucherInvalid = method() !== 'package' && typeof window.bdIsVoucherValid === 'function' && !window.bdIsVoucherValid();
+        continueBtn.disabled = on || !agree.checked || form.dataset.full === '1' || isInvalidPackage || isVoucherInvalid;
+    }
+
+    function showSlotModal(mode, text) {
+        var isFull = mode === 'full';
+        lastFocus = document.activeElement;
+        slotTitle.textContent = isFull ? 'This slot is no longer available' : 'We could not verify your booking';
+        slotText.textContent = text || (isFull ?
+            'Oops, sorry! The last spot in your selected class has just been booked. Kindly choose another available class.' :
+            'Please try again in a moment.');
+        slotBack.hidden = !isFull;
+        slotRefresh.textContent = isFull ? 'Refresh Availability' : 'Try Again';
+        slotRefresh.dataset.mode = mode;
+        slotModal.hidden = false;
+        slotModal.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('bd-modal-open');
+        slotRefresh.focus();
+    }
+
+    function hideSlotModal() {
+        slotModal.hidden = true;
+        slotModal.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('bd-modal-open');
+        if (lastFocus && lastFocus.focus) lastFocus.focus();
+    }
+
+    slotRefresh.addEventListener('click', function () {
+        if (slotRefresh.dataset.mode === 'full') {
+            window.location.reload();
+        } else {
+            hideSlotModal();
+        }
+    });
+    slotModal.addEventListener('click', function (e) {
+        if (e.target === slotModal) hideSlotModal();
+    });
+    document.addEventListener('keydown', function (e) {
+        if (slotModal.hidden) return;
+        if (e.key === 'Escape') {
+            hideSlotModal();
+        } else if (e.key === 'Tab') {
+            var items = [slotBack, slotRefresh].filter(function (el) {
+                return !el.hidden;
+            });
+            var first = items[0],
+                last = items[items.length - 1];
+            if (e.shiftKey && document.activeElement === first) {
+                e.preventDefault();
+                last.focus();
+            } else if (!e.shiftKey && document.activeElement === last) {
+                e.preventDefault();
+                first.focus();
+            }
+        }
+    });
+
+    window.addEventListener('pageshow', function (e) {
+        if (e.persisted) setChecking(false);
+    });
+
+    function checkSlotAndContinue() {
+        if (checking) return;
+
+        if (method() === 'dropin' && typeof window.bdIsVoucherValid === 'function' && !window.bdIsVoucherValid()) {
+            return;
+        }
+
+        setChecking(true);
+
+        var fd = new FormData(form);
+        var n = count();
+        var finalTotal = (method() === 'dropin' && typeof window.bdGetFinalTotal === 'function') ?
+            window.bdGetFinalTotal(price, n) :
+            (price * n);
+
+        if (method() === 'package') {
+            var effPkg = resolveEffectivePackageRadio();
+            if (effPkg && effPkg.value) {
+                fd.set('package_id', effPkg.value);
+                fd.set('user_package_id', effPkg.value);
+            }
+        }
+
+        fd.append('attendee_count', String(n));
+        fd.append('expected_total', String(finalTotal));
+
+        var ctrl = window.AbortController ? new AbortController() : null;
+        var timer = setTimeout(function () {
+            if (ctrl) ctrl.abort();
+        }, 15000);
+
+        fetch(endpoint, {
+                method: 'POST',
+                body: fd,
+                headers: {
+                    'X-Requested-With': 'fetch',
+                    'Accept': 'application/json'
+                },
+                credentials: 'same-origin',
+                signal: ctrl ? ctrl.signal : undefined
+            })
+            .then(function (res) {
+                return res.json().catch(function () {
+                    return {
+                        status: 'error'
+                    };
+                });
+            })
+            .then(function (d) {
+                clearTimeout(timer);
+                d = d || {};
+
+                if (d.status === 'available' && d.redirect) {
+                    if (continueLabel) continueLabel.textContent = 'Slot & price verified! Redirecting...';
+                    window.location.href = d.redirect;
+                    return;
+                }
+
+                setChecking(false);
+
+                if (d.status === 'full') {
+                    showSlotModal('full', d.message);
+                } else if (d.status === 'unauthenticated' && d.redirect) {
+                    window.location.href = d.redirect + (d.redirect.indexOf('?') > -1 ? '&' : '?') +
+                        'redirect=' + encodeURIComponent(location.pathname + location.search);
+                } else if (d.status === 'invalid') {
+                    form.submit();
+                } else {
+                    showSlotModal('error', d.message);
+                }
+            })
+            .catch(function () {
+                clearTimeout(timer);
+                setChecking(false);
+                showSlotModal('error', 'We could not reach the server. Please check your connection and try again.');
+            });
+    }
+
+    form.addEventListener('submit', function (e) {
+        if (method() === 'package' && (!resolveEffectivePackageRadio() || pkgRemaining() < count())) {
+            e.preventDefault();
+            packagesBox.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center'
+            });
+            return;
+        }
+        if (!form.checkValidity()) {
+            e.preventDefault();
+            list.querySelectorAll('[data-attendee]').forEach(function (c) {
+                if (c.querySelector(':invalid')) setOpen(c, true);
+            });
+            form.reportValidity();
+            return;
+        }
+        if (!agree.checked) {
+            e.preventDefault();
+            agree.focus();
+            return;
+        }
+
+        e.preventDefault();
+        if (!window.fetch || !window.FormData) {
+            form.submit();
+            return;
+        }
+        checkSlotAndContinue();
+    });
+
+    updateAttendeeTitles();
+    refresh();
+});
