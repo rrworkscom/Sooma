@@ -226,9 +226,18 @@ if (!function_exists('getDashboardPayload')) {
             if (!$hasProof) {
                 $proofUrl = '';
             } elseif (str_starts_with($rawProof, 'data:')) {
+                $proofUrl = preg_replace('/\s+/', '', $rawProof) ?? $rawProof;
+            } elseif (
+                str_starts_with($rawProof, 'http://') ||
+                str_starts_with($rawProof, 'https://') ||
+                str_starts_with($rawProof, '../') ||
+                str_starts_with($rawProof, '/')
+            ) {
                 $proofUrl = $rawProof;
+            } elseif (str_starts_with($rawProof, 'uploads/')) {
+                $proofUrl = '../' . $rawProof;
             } else {
-                $proofUrl = '../' . ltrim($rawProof, '/');
+                $proofUrl = '../uploads/receipts/' . rawurlencode($rawProof);
             }
 
             $levelStr = trim((string) ($r['level'] ?? 'All Level')) ?: 'All Level';

@@ -5,14 +5,13 @@
   if (!root) return;
 
   var STATUS = {
-    waiting:   'Waiting Payment',
+    waiting: 'Waiting Payment',
     verifying: 'Waiting Verification',
-    expired:   'Payment Expired',
+    expired: 'Payment Expired',
     confirmed: 'Booking Confirmed'
   };
   var MAX_BYTES = parseInt(root.dataset.max, 10) || 5 * 1024 * 1024;
-  var ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
-
+  var ALLOWED = ['image/jpeg', 'image/png', 'image/webp'];
   var status = root.dataset.status || 'waiting';
   var isPackageMode = root.dataset.mode === 'package';
   var badge = document.getElementById('pay-badge');
@@ -52,6 +51,16 @@
     if (!message) return;
     message.textContent = text || '';
     message.className = 'pay-message' + (type ? ' is-' + type : '');
+  }
+
+  function setButtonLabel(btn, text) {
+    if (!btn) return;
+    var span = btn.querySelector('span');
+    if (span) {
+      span.textContent = text;
+    } else {
+      btn.textContent = text;
+    }
   }
 
   function setPackageControlsDisabled(disabled) {
@@ -114,6 +123,9 @@
       stopTimer();
       countdown.textContent = '--:--';
       countdown.classList.remove('is-warning');
+      if (next === 'confirmed' && packageSubmitBtn) {
+        setButtonLabel(packageSubmitBtn, 'Processed');
+      }
       enableFinishLink(next);
     }
   }
@@ -145,15 +157,11 @@
   function showPreview(file) {
     if (objectUrl) URL.revokeObjectURL(objectUrl);
     thumb.innerHTML = '';
-    if (file.type.indexOf('image/') === 0) {
-      objectUrl = URL.createObjectURL(file);
-      var img = document.createElement('img');
-      img.src = objectUrl;
-      img.alt = '';
-      thumb.appendChild(img);
-    } else {
-      thumb.innerHTML = '<i class="ph ph-file-pdf"></i>';
-    }
+    objectUrl = URL.createObjectURL(file);
+    var img = document.createElement('img');
+    img.src = objectUrl;
+    img.alt = '';
+    thumb.appendChild(img);
     fileName.textContent = file.name;
     fileSize.textContent = fmtSize(file.size);
     preview.hidden = false;
@@ -164,10 +172,9 @@
   function onFileChosen() {
     var file = fileInput.files && fileInput.files[0];
     if (!file) { clearPreview(); return; }
-    var isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
-    if (ALLOWED.indexOf(file.type) === -1 && !isPdf) {
+    if (ALLOWED.indexOf(file.type) === -1) {
       clearPreview();
-      say('Only JPG, PNG, WEBP or PDF files are allowed.', 'error');
+      say('Only JPG, PNG, or WEBP images are allowed.', 'error');
       return;
     }
     if (file.size > MAX_BYTES) {
@@ -258,9 +265,11 @@
       fd.set('booking_id', root.dataset.bookingId);
     }
 
-    var origLabel = packageSubmitBtn ? packageSubmitBtn.textContent : '';
+    var spanEl = packageSubmitBtn ? packageSubmitBtn.querySelector('span') : null;
+    var origLabel = spanEl ? spanEl.textContent : (packageSubmitBtn ? packageSubmitBtn.textContent : 'Confirm Booking');
+
     setPackageControlsDisabled(true);
-    if (packageSubmitBtn) packageSubmitBtn.textContent = 'Processing...';
+    setButtonLabel(packageSubmitBtn, 'Processing...');
 
     fetch(endpoint, {
       method: 'POST',
@@ -280,16 +289,17 @@
         } else {
           if (data.status === 'expired') {
             setStatus('expired');
+            setButtonLabel(packageSubmitBtn, origLabel);
           } else {
             setPackageControlsDisabled(false);
-            if (packageSubmitBtn) packageSubmitBtn.textContent = origLabel;
+            setButtonLabel(packageSubmitBtn, origLabel);
           }
           say(data.message || 'Unable to pay using this package.', 'error');
         }
       })
       .catch(function () {
         setPackageControlsDisabled(false);
-        if (packageSubmitBtn) packageSubmitBtn.textContent = origLabel;
+        setButtonLabel(packageSubmitBtn, origLabel);
         say('Network error. Please check your connection and try again.', 'error');
       });
   }

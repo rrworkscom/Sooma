@@ -2,20 +2,61 @@
 
 $envFile = __DIR__ . '/.env';
 if (is_file($envFile)) {
-    foreach (file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
-        $line = trim($line);
-        if ($line === '' || str_starts_with($line, '#') || !str_contains($line, '=')) {
-            continue;
+    $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    if ($lines !== false) {
+        foreach ($lines as $index => $line) {
+            if ($index === 0) {
+                $line = preg_replace('/^\xEF\xBB\xBF/', '', $line);
+            }
+
+            $line = trim($line);
+            if ($line === '' || str_starts_with($line, '#') || !str_contains($line, '=')) {
+                continue;
+            }
+
+            if (str_starts_with($line, 'export ')) {
+                $line = trim(substr($line, 7));
+            }
+
+            [$key, $value] = explode('=', $line, 2);
+            $key   = trim($key);
+            $value = trim($value);
+
+            if (
+                strlen($value) >= 2 &&
+                (($value[0] === '"' && str_ends_with($value, '"')) ||
+                 ($value[0] === "'" && str_ends_with($value, "'")))
+            ) {
+                $value = substr($value, 1, -1);
+            } else {                
+                $value = preg_replace('/\s+#.*$/', '', $value);
+            }
+
+            $value = preg_replace('/[\x00-\x1F\x7F\x{200B}-\x{200D}\x{FEFF}]/u', '', $value);
+
+            $_ENV[$key]    = $value;
+            $_SERVER[$key] = $value;
+            putenv("$key=$value");
         }
-        [$key, $value] = explode('=', $line, 2);
-        $_ENV[trim($key)] = trim($value, " \t\"'");
     }
 }
 
-$debug       = ($_ENV['APP_DEBUG'] ?? '') === '1';
-$databaseUrl = $_ENV['DATABASE_URL'] ?? getenv('DATABASE_URL');
+function sw_env(string $key, string $default = ''): string
+{
+    $value = $_ENV[$key] ?? $_SERVER[$key] ?? getenv($key);
+    if ($value === false || $value === null || trim((string) $value) === '') {
+        return $default;
+    }
+    return trim((string) $value);
+}
 
-if (!$databaseUrl) {
+$debug              = sw_env('APP_DEBUG') === '1';
+$databaseUrl        = sw_env('DATABASE_URL');
+$googleClientId     = sw_env('GOOGLE_CLIENT_ID');
+$googleClientSecret = sw_env('GOOGLE_CLIENT_SECRET');
+$googleRedirectUri  = sw_env('GOOGLE_REDIRECT_URI', 'http://localhost:8000/login-regist/index.php');
+
+if ($databaseUrl === '') {
     die('DATABASE_URL belum diatur. Cek file .env');
 }
 
@@ -30,7 +71,6 @@ $dsn = sprintf(
     $parts['port'] ?? 5432,
     ltrim($parts['path'], '/')
 );
-
 
 try {
     $pdo = new PDO(
@@ -51,9 +91,9 @@ try {
 
 function sw_encryption_key(): string
 {
-    $key = $_ENV['APP_ENCRYPTION_KEY'] ?? getenv('APP_ENCRYPTION_KEY');
+    $key = sw_env('APP_ENCRYPTION_KEY');
 
-    if (!is_string($key) || strlen($key) !== 32) {
+    if (strlen($key) !== 32) {
         throw new RuntimeException('APP_ENCRYPTION_KEY belum diatur atau panjangnya bukan 32 karakter. Cek file .env');
     }
 

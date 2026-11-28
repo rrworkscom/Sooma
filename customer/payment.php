@@ -16,16 +16,93 @@ $maxBytes       = 5 * 1024 * 1024;
 
 require __DIR__ . '/../includes/booking-service.php';
 
-function pay_detect_type(string $path): ?array
-{
-    $h = @file_get_contents($path, false, null, 0, 12);
-    if ($h === false || strlen($h) < 4) {
-        return null;
+if (!function_exists('sw_uploaded_image_to_data_uri')) {
+    function sw_uploaded_image_to_data_uri(
+        array $file,
+        int $maxDim = 900,
+        int $quality = 75,
+        int $maxBytes = 5242880
+    ): string {
+        if (!isset($file['error']) || $file['error'] !== UPLOAD_ERR_OK) {
+            throw new RuntimeException('File upload failed or no file was selected.');
+        }
+
+        if (!is_uploaded_file($file['tmp_name'])) {
+            throw new RuntimeException('Invalid uploaded file source.');
+        }
+
+        if (($file['size'] ?? 0) > $maxBytes) {
+            $maxMb = (int) round($maxBytes / (1024 * 1024));
+            throw new RuntimeException("Image size must be less than {$maxMb}MB.");
+        }
+
+        $allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+        if (function_exists('finfo_open')) {
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $mime  = finfo_file($finfo, $file['tmp_name']);
+            finfo_close($finfo);
+        } else {
+            $imgInfo = @getimagesize($file['tmp_name']);
+            $mime    = $imgInfo['mime'] ?? '';
+        }
+
+        if (!in_array($mime, $allowedTypes, true)) {
+            throw new RuntimeException('Only JPG, PNG, or WEBP images are allowed.');
+        }
+
+        $binaryData = file_get_contents($file['tmp_name']);
+        if ($binaryData === false || $binaryData === '') {
+            throw new RuntimeException('Unable to read uploaded image.');
+        }
+
+        if (function_exists('imagecreatefromstring')) {
+            $srcImg = @imagecreatefromstring($binaryData);
+            if ($srcImg !== false) {
+                if ($mime === 'image/jpeg' && function_exists('exif_read_data')) {
+                    $exif = @exif_read_data($file['tmp_name']);
+                    $orientation = (int) ($exif['Orientation'] ?? 1);
+                    if ($orientation === 3) {
+                        $srcImg = imagerotate($srcImg, 180, 0);
+                    } elseif ($orientation === 6) {
+                        $srcImg = imagerotate($srcImg, -90, 0);
+                    } elseif ($orientation === 8) {
+                        $srcImg = imagerotate($srcImg, 90, 0);
+                    }
+                }
+
+                $origW = imagesx($srcImg);
+                $origH = imagesy($srcImg);
+
+                if ($origW > $maxDim || $origH > $maxDim) {
+                    $ratio = min($maxDim / $origW, $maxDim / $origH);
+                    $newW  = max(1, (int) round($origW * $ratio));
+                    $newH  = max(1, (int) round($origH * $ratio));
+                } else {
+                    $newW = $origW;
+                    $newH = $origH;
+                }
+
+                $dstImg = imagecreatetruecolor($newW, $newH);
+                $white = imagecolorallocate($dstImg, 255, 255, 255);
+                imagefilledrectangle($dstImg, 0, 0, $newW, $newH, $white);
+                imagecopyresampled($dstImg, $srcImg, 0, 0, 0, 0, $newW, $newH, $origW, $origH);
+
+                ob_start();
+                imagejpeg($dstImg, null, $quality);
+                $compressed = ob_get_clean();
+
+                imagedestroy($srcImg);
+                imagedestroy($dstImg);
+
+                if ($compressed !== false && $compressed !== '') {
+                    $binaryData = $compressed;
+                    $mime       = 'image/jpeg';
+                }
+            }
+        }
+
+        return 'data:' . $mime . ';base64,' . base64_encode($binaryData);
     }
-    if (strncmp($h, "\xFF\xD8\xFF", 3) === 0) return ['ext' => 'jpg',  'mime' => 'image/jpeg'];
-    if (strncmp($h, "\x89PNG", 4) === 0)       return ['ext' => 'png',  'mime' => 'image/png'];
-    if (strncmp($h, 'RIFF', 4) === 0 && substr($h, 8, 4) === 'WEBP') return ['ext' => 'webp', 'mime' => 'image/webp'];
-    return null;
 }
 
 function pay_normalize_category(string $raw): string
@@ -40,30 +117,67 @@ function pay_normalize_category(string $raw): string
     if (str_contains($v, 'yoga')) {
         return 'yoga';
     }
-    return $v;
+    return 'unknown';
+}
+
+function pay_normalize_session_scope(string $raw): string
+{
+    $v = strtolower(trim($raw));
+    if ($v === '' || str_contains($v, 'all')) {
+        return 'all';
+    }
+    if (str_contains($v, 'private group') || str_contains($v, 'semi private') || str_contains($v, 'semi-private')) {
+        return 'private_group';
+    }
+    if (str_contains($v, 'private')) {
+        return 'private';
+    }
+    if (str_contains($v, 'group')) {
+        return 'group';
+    }
+    return 'all';
 }
 
 function pay_is_package_compatible(array $pkg, string $targetCategory, string $targetClassName = ''): bool
 {
-    $pkgKey = 'all';
-    foreach (['category', 'class_category', 'type', 'class_name', 'name'] as $field) {
+    $pkgCat = 'all';
+    foreach (['category', 'class_category', 'class_name', 'name'] as $field) {
         if (!empty($pkg[$field])) {
             $norm = pay_normalize_category((string) $pkg[$field]);
             if (in_array($norm, ['all', 'pilates', 'yoga'], true)) {
-                $pkgKey = $norm;
+                $pkgCat = $norm;
                 break;
             }
         }
     }
 
-    $targetKey = pay_normalize_category($targetCategory);
-    if (!in_array($targetKey, ['pilates', 'yoga'], true)) {
-        $targetKey = pay_normalize_category($targetClassName);
+    $targetCat = pay_normalize_category($targetCategory);
+    if (!in_array($targetCat, ['pilates', 'yoga'], true)) {
+        $targetCat = pay_normalize_category($targetClassName);
     }
-    if ($pkgKey === 'all' || !in_array($targetKey, ['pilates', 'yoga'], true)) {
-        return true;
+
+    if ($pkgCat !== 'all' && in_array($targetCat, ['pilates', 'yoga'], true) && $pkgCat !== $targetCat) {
+        return false;
     }
-    return $pkgKey === $targetKey;
+
+    $pkgScope = 'all';
+    foreach (['name', 'category', 'type'] as $field) {
+        if (!empty($pkg[$field])) {
+            $scope = pay_normalize_session_scope((string) $pkg[$field]);
+            if ($scope !== 'all') {
+                $pkgScope = $scope;
+                break;
+            }
+        }
+    }
+
+    $targetScope = pay_normalize_session_scope($targetCategory . ' ' . $targetClassName);
+
+    if ($pkgScope !== 'all' && $targetScope !== 'all' && $pkgScope !== $targetScope) {
+        return false;
+    }
+
+    return true;
 }
 
 function pay_format_short_date(?string $raw): string
@@ -294,56 +408,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'payment_proof' && $paymentMethod !== 'package') {
         $f = $_FILES['receipt'] ?? null;
 
-        if (!$f || $f['error'] === UPLOAD_ERR_NO_FILE) {
+        if (!$f || ($f['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
             $reply(false, 'Please choose a payment receipt first.');
         }
-        if ($f['error'] === UPLOAD_ERR_INI_SIZE || $f['error'] === UPLOAD_ERR_FORM_SIZE || $f['size'] > $maxBytes) {
-            $reply(false, 'File is too large. Maximum size is 5 MB.');
-        }
-        if ($f['error'] !== UPLOAD_ERR_OK || !is_uploaded_file($f['tmp_name'])) {
-            $reply(false, 'Upload failed. Please try again.', 500);
-        }
 
-        $detected = pay_detect_type($f['tmp_name']);
-        if ($detected === null) {
-            $reply(false, 'Only JPG, PNG, or WEBP images are allowed.');
+        try {
+            $proofDataUri = sw_uploaded_image_to_data_uri($f, 900, 75, $maxBytes);
+        } catch (RuntimeException $ex) {
+            $reply(false, $ex->getMessage(), 422);
         }
 
-        $binaryData = @file_get_contents($f['tmp_name']);
-        if ($binaryData === false) {
-            $reply(false, 'Could not read the uploaded file. Please try again.', 500);
-        }
-
-        $mime = $detected['mime'];
-
-        if (function_exists('imagecreatefromstring')) {
-            $srcImg = @imagecreatefromstring($binaryData);
-            if ($srcImg !== false) {
-                $origW  = imagesx($srcImg);
-                $origH  = imagesy($srcImg);
-                $maxDim = 900;
-
-                if ($origW > $maxDim || $origH > $maxDim) {
-                    $ratio  = min($maxDim / $origW, $maxDim / $origH);
-                    $newW   = (int) round($origW * $ratio);
-                    $newH   = (int) round($origH * $ratio);
-                    $dstImg = imagecreatetruecolor($newW, $newH);
-                    imagecopyresampled($dstImg, $srcImg, 0, 0, 0, 0, $newW, $newH, $origW, $origH);
-                    imagedestroy($srcImg);
-                    $srcImg = $dstImg;
-                }
-
-                ob_start();
-                imagejpeg($srcImg, null, 78);
-                $binaryData = ob_get_clean();
-                imagedestroy($srcImg);
-                $mime = 'image/jpeg';
-            }
-        }
-
-        $proofDataUri = 'data:' . $mime . ';base64,' . base64_encode($binaryData);
-        $amount       = max(0, (int) $booking['total_payment']);
-        $step         = 'init';
+        $amount = max(0, (int) $booking['total_payment']);
+        $step   = 'init';
 
         try {
             $pdo->beginTransaction();
@@ -454,6 +530,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 select up.user_package_id,
                        up.remaining_sessions,
                        coalesce(pkg.package_name, 'Class Package') as name,
+                       coalesce(
+                           nullif(trim(to_jsonb(pkg)->>'variant_label'), ''),
+                           coalesce(pkg.total_sessions, 1)::text || ' Sessions'
+                       ) as type,
                        coalesce(mc.class_name, 'All Classes') as category
                   from sooma_wellness.user_packages up
                   join sooma_wellness.packages pkg on pkg.package_id = up.package_id
@@ -596,20 +676,18 @@ $earliestPayPackageId  = 0;
 if ($isPackage) {
     foreach ($userPackages as $up) {
         $isCompat = pay_is_package_compatible($up, (string) $booking['class_type'], (string) $booking['class_name']);
-        $up['is_compatible'] = $isCompat;
+        if (!$isCompat) {
+            continue;
+        }
+        $up['is_compatible'] = true;
         $compatiblePayPackages[] = $up;
         $effRem = (int) $up['remaining'] + ((int) $up['user_package_id'] === $savedPreselectedUpId ? $attendeeCnt : 0);
         if ($earliestPayPackageId === 0 && $effRem >= $attendeeCnt) {
             $earliestPayPackageId = (int) $up['user_package_id'];
         }
     }
-    if ($earliestPayPackageId === 0) {
-        foreach ($compatiblePayPackages as $up) {
-            if (!empty($up['is_compatible'])) {
-                $earliestPayPackageId = (int) $up['user_package_id'];
-                break;
-            }
-        }
+    if ($earliestPayPackageId === 0 && !empty($compatiblePayPackages)) {
+        $earliestPayPackageId = (int) $compatiblePayPackages[0]['user_package_id'];
     }
 }
 
@@ -686,17 +764,23 @@ require __DIR__ . '/../includes/header.php';
                         <input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>">
                         <input type="hidden" name="action" value="confirm_package">
 
-                        <?php if (!empty($compatiblePayPackages) && $canUpload): ?>
-                            <div class="pay-pkg-selector" id="pay-pkg-selector">
+                        <?php if (!empty($compatiblePayPackages) && $canUpload):
+                            $hasMultiplePackages = count($compatiblePayPackages) > 1;
+                        ?>
+                            <div class="pay-pkg-selector" id="pay-pkg-selector" data-single="<?= $hasMultiplePackages ? '0' : '1' ?>">
                                 <div class="pay-pkg-selector__head">
                                     <span class="pay-pkg-selector__title">Select Package</span>
-                                    <button type="button" class="pay-pkg-selector__clear" id="pay-pkg-clear" <?= $preselectedUpId > 0 ? '' : 'hidden' ?>>
-                                        Use Earliest (Default)
-                                    </button>
+                                    <?php if ($hasMultiplePackages): ?>
+                                        <button type="button" class="pay-pkg-selector__clear" id="pay-pkg-clear" <?= $preselectedUpId > 0 ? '' : 'hidden' ?>>
+                                            Use Earliest (Default)
+                                        </button>
+                                    <?php endif; ?>
                                 </div>
-                                <p class="pay-pkg-selector__hint">
-                                    Leave unselected to automatically use your earliest purchased compatible package.
-                                </p>
+                                <?php if ($hasMultiplePackages): ?>
+                                    <button type="button" class="pay-pkg-selector__clear" id="pay-pkg-clear" <?= $preselectedUpId > 0 ? '' : 'hidden' ?>>
+                                        Use Earliest Package
+                                    </button>
+                                <?php endif; ?>
                                 <?php foreach ($compatiblePayPackages as $up):
                                     $upId       = (int) $up['user_package_id'];
                                     $isCompat   = !empty($up['is_compatible']);
@@ -704,7 +788,7 @@ require __DIR__ . '/../includes/header.php';
                                     $hasEnough  = $effRem >= $attendeeCnt;
                                     $canPick    = $isCompat && $hasEnough;
                                     $isEarliest = ($upId === $earliestPayPackageId);
-                                    $isChecked  = ($canPick && $upId === $preselectedUpId);
+                                    $isChecked  = ($canPick && ($upId === $preselectedUpId || !$hasMultiplePackages));
                                 ?>
                                     <label class="pay-pkg-option<?= !$canPick ? ' is-disabled' : '' ?>">
                                         <input type="radio"
@@ -717,7 +801,7 @@ require __DIR__ . '/../includes/header.php';
                                             <span>
                                                 <span class="pay-pkg-option__name">
                                                     <?= e($up['name']) ?>
-                                                    <?php if ($isEarliest): ?>
+                                                    <?php if ($isEarliest && $hasMultiplePackages): ?>
                                                         <span class="pay-pkg-option__tag">Earliest Purchased</span>
                                                     <?php endif; ?>
                                                 </span>
@@ -740,7 +824,7 @@ require __DIR__ . '/../includes/header.php';
                         <?php endif; ?>
 
                         <button type="submit" class="pay-upload-btn" <?= $canUpload ? '' : 'disabled' ?>>
-                            <i class="ph ph-check-circle"></i><span>Confirm Booking</span>
+                            <i class="ph ph-check-circle"></i><span><?= $status === 'confirmed' ? 'Processed' : 'Confirm Booking' ?></span>
                         </button>
                     </form>
                     <p class="pay-message <?= $flash ? 'is-' . e($flash['type']) : '' ?>" id="pay-message" role="status" aria-live="polite"><?= e($flash['message'] ?? '') ?></p>
@@ -862,106 +946,123 @@ require __DIR__ . '/../includes/header.php';
 </main>
 
 <script>
-(function() {
-    var locked = false;
-    function lockHistory() {
-        if (!window.history || !window.history.pushState) return;
-        window.history.pushState({ paymentLocked: true }, '', window.location.href);
-        locked = true;
-    }
+    (function() {
+        var locked = false;
 
-    lockHistory();
-    ['pointerdown', 'keydown', 'touchstart'].forEach(function(evt) {
-        window.addEventListener(evt, function once() {
-            if (!locked) lockHistory();
-        }, { once: true, passive: true });
-    });
-
-    window.addEventListener('popstate', function() {
-        window.history.pushState({ paymentLocked: true }, '', window.location.href);
-    });
-
-    window.addEventListener('pageshow', function(event) {
-        if (event.persisted) {
-            window.location.reload();
-        }
-    });
-
-    var copyBtn = document.getElementById('pay-copy-account');
-    var accountEl = document.getElementById('pay-bank-account');
-    var copyLabel = document.getElementById('pay-copy-label');
-
-    function copyAccountNumber() {
-        if (!accountEl) return;
-        var acct = accountEl.textContent.trim();
-
-        function showCopied() {
-            if (copyBtn) copyBtn.classList.add('is-copied');
-            if (copyLabel) copyLabel.textContent = 'Copied!';
-            setTimeout(function() {
-                if (copyBtn) copyBtn.classList.remove('is-copied');
-                if (copyLabel) copyLabel.textContent = 'Copy';
-            }, 1800);
+        function lockHistory() {
+            if (!window.history || !window.history.pushState) return;
+            window.history.pushState({
+                paymentLocked: true
+            }, '', window.location.href);
+            locked = true;
         }
 
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(acct).then(showCopied).catch(fallbackCopy);
-        } else {
-            fallbackCopy();
-        }
+        lockHistory();
+        ['pointerdown', 'keydown', 'touchstart'].forEach(function(evt) {
+            window.addEventListener(evt, function once() {
+                if (!locked) lockHistory();
+            }, {
+                once: true,
+                passive: true
+            });
+        });
 
-        function fallbackCopy() {
-            var ta = document.createElement('textarea');
-            ta.value = acct;
-            ta.style.position = 'fixed';
-            ta.style.opacity = '0';
-            document.body.appendChild(ta);
-            ta.select();
-            try {
-                document.execCommand('copy');
-                showCopied();
-            } catch (e) {}
-            document.body.removeChild(ta);
-        }
-    }
+        window.addEventListener('popstate', function() {
+            window.history.pushState({
+                paymentLocked: true
+            }, '', window.location.href);
+        });
 
-    if (copyBtn) copyBtn.addEventListener('click', copyAccountNumber);
-    if (accountEl) accountEl.addEventListener('click', copyAccountNumber);
-
-    var pkgForm = document.getElementById('pay-package-form');
-    if (!pkgForm) return;
-    var clearBtn = document.getElementById('pay-pkg-clear');
-    var radios = Array.prototype.slice.call(pkgForm.querySelectorAll('input[name="user_package_id"]'));
-
-    function syncPayPackageHighlight() {
-        var checked = radios.find(function(r) { return r.checked && !r.disabled; });
-        var earliest = radios.find(function(r) { return !r.disabled && r.dataset.earliest === '1'; })
-            || radios.find(function(r) { return !r.disabled; });
-
-        radios.forEach(function(r) {
-            var wrap = r.closest('.pay-pkg-option');
-            if (wrap) {
-                wrap.classList.toggle('is-auto-default', !checked && r === earliest);
+        window.addEventListener('pageshow', function(event) {
+            if (event.persisted) {
+                window.location.reload();
             }
         });
-        if (clearBtn) {
-            clearBtn.hidden = !checked;
+
+        var copyBtn = document.getElementById('pay-copy-account');
+        var accountEl = document.getElementById('pay-bank-account');
+        var copyLabel = document.getElementById('pay-copy-label');
+
+        function copyAccountNumber() {
+            if (!accountEl) return;
+            var acct = accountEl.textContent.trim();
+
+            function showCopied() {
+                if (copyBtn) copyBtn.classList.add('is-copied');
+                if (copyLabel) copyLabel.textContent = 'Copied!';
+                setTimeout(function() {
+                    if (copyBtn) copyBtn.classList.remove('is-copied');
+                    if (copyLabel) copyLabel.textContent = 'Copy';
+                }, 1800);
+            }
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(acct).then(showCopied).catch(fallbackCopy);
+            } else {
+                fallbackCopy();
+            }
+
+            function fallbackCopy() {
+                var ta = document.createElement('textarea');
+                ta.value = acct;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                try {
+                    document.execCommand('copy');
+                    showCopied();
+                } catch (e) {}
+                document.body.removeChild(ta);
+            }
         }
-    }
 
-    radios.forEach(function(r) {
-        r.addEventListener('change', syncPayPackageHighlight);
-    });
+        if (copyBtn) copyBtn.addEventListener('click', copyAccountNumber);
+        if (accountEl) accountEl.addEventListener('click', copyAccountNumber);
 
-    if (clearBtn) {
-        clearBtn.addEventListener('click', function() {
-            radios.forEach(function(r) { r.checked = false; });
-            syncPayPackageHighlight();
+        var pkgForm = document.getElementById('pay-package-form');
+        if (!pkgForm) return;
+        var clearBtn = document.getElementById('pay-pkg-clear');
+        var radios = Array.prototype.slice.call(pkgForm.querySelectorAll('input[name="user_package_id"]'));
+        var isSinglePackage = radios.length <= 1;
+
+        function syncPayPackageHighlight() {
+            var checked = radios.find(function(r) {
+                return r.checked && !r.disabled;
+            });
+            var earliest = radios.find(function(r) {
+                    return !r.disabled && r.dataset.earliest === '1';
+                }) ||
+                radios.find(function(r) {
+                    return !r.disabled;
+                });
+
+            radios.forEach(function(r) {
+                var wrap = r.closest('.pay-pkg-option');
+                if (wrap) {
+                    wrap.classList.toggle('is-auto-default', !checked && r === earliest);
+                }
+            });
+            if (clearBtn) {
+                clearBtn.hidden = isSinglePackage || !checked;
+            }
+        }
+
+        radios.forEach(function(r) {
+            r.addEventListener('change', syncPayPackageHighlight);
         });
-    }
 
-    syncPayPackageHighlight();
-})();
+        if (clearBtn && !isSinglePackage) {
+            clearBtn.addEventListener('click', function() {
+                radios.forEach(function(r) {
+                    r.checked = false;
+                });
+                syncPayPackageHighlight();
+            });
+        }
+
+        syncPayPackageHighlight();
+    })();
 </script>
 <?php require __DIR__ . '/../includes/footer.php'; ?>
 <script src="../assets/js/payment.js"></script>

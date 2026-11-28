@@ -695,6 +695,7 @@
         payload.set('attendee_count', String(qty));
         payload.set('payment_method', paymentMethod);
         payload.set('package_id', (paymentMethod === 'package' && selectedPkgId) ? selectedPkgId : '');
+        payload.set('user_package_id', (paymentMethod === 'package' && selectedPkgId) ? selectedPkgId : '');
 
         cards.forEach(function (c, i) {
             var nInput = c.querySelector('[data-attendee-name]');

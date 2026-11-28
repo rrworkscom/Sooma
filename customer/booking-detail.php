@@ -1033,7 +1033,7 @@ require __DIR__ . '/../includes/header.php';
                         <div class="bd-packages__header">
                             <h3 class="bd-packages__title">My Packages</h3>
                             <button type="button" class="bd-packages__clear" id="bd-clear-package" hidden>
-                                <?= $hasMultipleCompatiblePackages ? 'Use Earliest (Default)' : 'Use Default Package' ?>
+                                Use Earliest Package
                             </button>
                         </div>
                         <?php if ($packages): ?>
@@ -1041,7 +1041,7 @@ require __DIR__ . '/../includes/header.php';
                                 <?php if ($hasMultipleCompatiblePackages): ?>
                                     Select the package you want to use, or leave unselected to automatically use your earliest purchased package.
                                 <?php else: ?>
-                                    Select the package you want or leave unselected to automatically use your package.
+                                    Your compatible package is selected automatically.
                                 <?php endif; ?>
                             </p>
                             <?php foreach ($packages as $pkg):
@@ -1050,6 +1050,10 @@ require __DIR__ . '/../includes/header.php';
                                 $pkgTypeKey  = bd_package_type_key($pkg);
                                 $isCompat    = bd_is_package_compatible($pkg, (string) $class['category'], (string) $class['class_name'], (string) $class['type'], $initAttendeesCount);
                                 $isEarliest  = $hasMultipleCompatiblePackages && $isCompat && ($pkgIdStr === $earliestCompatiblePkgId);
+                                $isChecked   = $isCompat && (
+                                    ($pkgIdStr !== '' && $pkgIdStr === $old['package_id'])
+                                    || !$hasMultipleCompatiblePackages
+                                );
                                 $boughtStr   = bd_format_short_date($pkg['purchased_at'] ?? null);
                                 $expStr      = bd_format_short_date($pkg['expired_at'] ?? null);
                             ?>
@@ -1060,7 +1064,7 @@ require __DIR__ . '/../includes/header.php';
                                         data-class-type="<?= e($pkgTypeKey) ?>"
                                         data-pkg-label="<?= e((string) ($pkg['name'] ?? $pkg['category'] ?? $pkg['type'] ?? '')) ?>"
                                         <?= !$isCompat ? 'disabled' : '' ?>
-                                        <?= ($isCompat && $pkgIdStr !== '' && $pkgIdStr === $old['package_id']) ? 'checked' : '' ?>>
+                                        <?= $isChecked ? 'checked' : '' ?>>
                                     <span class="bd-package__card">
                                         <span class="bd-package__info">
                                             <span class="bd-package__name">

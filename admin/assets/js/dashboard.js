@@ -31,6 +31,21 @@
         });
     }
 
+    function resolveReceiptSrc(raw) {
+        var val = String(raw || '').trim();
+        if (!val) return '';
+        if (/^data:/i.test(val)) {
+            return val.replace(/[\r\n\s]+/g, '');
+        }
+        if (/^(https?:\/\/|\.\.\/|\/)/i.test(val)) {
+            return val;
+        }
+        if (/^uploads\//i.test(val)) {
+            return '../' + val;
+        }
+        return '../uploads/receipts/' + encodeURIComponent(val);
+    }
+
     function isPrivateAccepted(b) {
         if (!b) return false;
         var reqStatus = String(b.private_status || b.booking_status || b.request_status || b.approval_status || '').trim().toLowerCase();
@@ -588,8 +603,15 @@
     }
 
     function showReceiptEmpty(message) {
-        if (receiptImg) { receiptImg.hidden = true; receiptImg.removeAttribute('src'); }
-        if (receiptEmpty) { receiptEmpty.textContent = message; receiptEmpty.hidden = false; }
+        if (receiptImg) {
+            receiptImg.onerror = null;
+            receiptImg.hidden = true;
+            receiptImg.removeAttribute('src');
+        }
+        if (receiptEmpty) {
+            receiptEmpty.textContent = message;
+            receiptEmpty.hidden = false;
+        }
     }
 
     function openReceiptModal(id, trigger) {
@@ -601,18 +623,19 @@
 
         var status = item.status || 'pending';
         var isPrivateReq = isPrivateRequestItem(item);
+        var receiptSrc = resolveReceiptSrc(item.receipt);
 
         var eyebrowEl = receiptModal.querySelector('.dash-modal__eyebrow');
         if (eyebrowEl) {
             eyebrowEl.textContent = isPrivateReq ? 'Verify Private Request' : 'Verify Payment Receipt';
         }
 
-        if (item.receipt) {
+        if (receiptSrc) {
             receiptEmpty.hidden = true;
             receiptImg.hidden = false;
             receiptImg.alt = 'Payment receipt of ' + item.name + ' (' + item.display_id + ')';
             receiptImg.onerror = function () { showReceiptEmpty('The receipt image could not be loaded.'); };
-            receiptImg.src = item.receipt;
+            receiptImg.src = receiptSrc;
         } else {
             showReceiptEmpty(
                 isPrivateReq
