@@ -30,7 +30,27 @@ $stmt = $pdo->prepare("
     select b.booking_id as id,
            coalesce(b.booking_code, 'BK-' || lpad(b.booking_id::text, 4, '0')) as code,
            b.booking_status,
-           p.payment_proof,
+           coalesce(nullif(to_jsonb(b)->>'private_request_id', ''), nullif(to_jsonb(b)->>'request_id', ''), '') as private_request_id,
+           (
+               lower(coalesce(cs.class_type, '')) like '%private%'
+               or lower(coalesce(mc.class_name, '')) like '%private%'
+               or upper(ltrim(coalesce(b.booking_code, ''), '#')) like 'REQ%'
+               or coalesce(nullif(to_jsonb(b)->>'private_request_id', ''), nullif(to_jsonb(b)->>'request_id', ''), '') <> ''
+               or exists (
+                   select 1
+                     from sooma_wellness.request_classes rc
+                    where rc.customer_id = b.customer_id
+                      and (
+                          to_jsonb(rc)->>'booking_id' = b.booking_id::text
+                          or to_jsonb(rc)->>'schedule_id' = cs.schedule_id::text
+                          or (
+                              rc.class_id = cs.class_id
+                              and rc.preferred_date = cs.schedule_date
+                              and rc.preferred_time = cs.start_time
+                          )
+                      )
+               )
+           ) as is_private_req,
            p.verification_status,
            coalesce(nullif(to_jsonb(p)->>'admin_note', ''), nullif(to_jsonb(p)->>'rejection_reason', ''), '') as admin_note,
            cs.schedule_date as date,
@@ -98,6 +118,13 @@ foreach ($dbRows as $r) {
         $attendees[] = ['name' => $user_name, 'is_you' => true];
     }
 
+    $cleanCode = strtoupper(ltrim((string) $r['code'], '#'));
+    $isPrivate = filter_var($r['is_private_req'] ?? false, FILTER_VALIDATE_BOOLEAN)
+        || str_contains(strtolower((string) $r['type']), 'private')
+        || str_contains(strtolower((string) $r['class_name']), 'private')
+        || str_starts_with($cleanCode, 'REQ')
+        || trim((string) ($r['private_request_id'] ?? '')) !== '';
+
     $transactions[] = [
         'id'           => (int) $r['id'],
         'code'         => '#' . ltrim((string) $r['code'], '#'),
@@ -116,6 +143,7 @@ foreach ($dbRows as $r) {
         'image'        => '../assets/images/gallery-main.png',
         'attendees'    => $attendees,
         'is_package'   => false,
+        'is_private'   => $isPrivate,
     ];
 }
 
@@ -188,6 +216,7 @@ foreach ($pkgStmt->fetchAll(PDO::FETCH_ASSOC) as $pr) {
         'image'        => '../assets/images/gallery-main.png',
         'attendees'    => [['name' => $user_name, 'is_you' => true]],
         'is_package'   => true,
+        'is_private'   => false,
     ];
 }
 
@@ -253,6 +282,7 @@ $empty_messages = [
 
 $modal_payload = [];
 foreach ($transactions as $t) {
+    $payEndpoint = !empty($t['is_private']) ? './payment-private-request.php' : './payment.php';
     $modal_payload[(string) $t['id']] = [
         'image'            => $t['image'],
         'class_name'       => $t['class_name'],
@@ -268,6 +298,8 @@ foreach ($transactions as $t) {
         'attendees'        => $t['attendees'],
         'admin_note'       => $t['admin_note'] !== '' ? $t['admin_note'] : '-',
         'status_label'     => $t['status_label'],
+        'is_private'       => !empty($t['is_private']),
+        'pay_url'          => $payEndpoint . '?id=' . urlencode((string) $t['id']),
     ];
 }
 $sidebar_current     = basename($_SERVER['SCRIPT_NAME'] ?? 'profile-transaction.php');
@@ -368,8 +400,11 @@ $navbar_profile_href = 'profile.php';
 
                                     <div class="txn-action__buttons">
                                         <?php if ($tab === 'unpaid' && !$t['is_package']): ?>
-                                            <a href="./payment.php?id=<?= urlencode((string) $t['id']) ?>"
-                                                class="btn-show-details">
+                                            <?php $payUrl = !empty($t['is_private']) ? './payment-private-request.php' : './payment.php'; ?>
+                                            <a href="<?= $payUrl ?>?id=<?= urlencode((string) $t['id']) ?>"
+                                                class="btn-show-details"
+                                                data-pay-url="<?= e($payUrl . '?id=' . urlencode((string) $t['id'])) ?>"
+                                                data-is-private="<?= !empty($t['is_private']) ? '1' : '0' ?>">
                                                 Paid Now
                                             </a>
                                         <?php endif; ?>
