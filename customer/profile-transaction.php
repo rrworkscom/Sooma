@@ -24,12 +24,52 @@ $user_name   = $sessionUser['name']       ?? 'Member';
 $user_avatar = $sessionUser['avatar_url'] ?? 'assets/images/users/emilia-bonnita.png';
 $location    = ['name' => 'Sooma Wellness', 'address' => 'Jl Ciliwung no. 62, Blitar'];
 
-syncUserBookingStatuses($pdo, $userId);
+try {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    $pdo->exec('set search_path to sooma_wellness, public');
+    syncUserBookingStatuses($pdo, $userId);
+} catch (Throwable $e) {
+    error_log('[profile-transaction sync] ' . $e->getMessage());
+}
+
+// 1. Paksa update ke 'expired' untuk semua booking waiting_payment yang waktunya sudah habis (30 menit)
+$expireStmt = $pdo->prepare("
+    update sooma_wellness.bookings b
+       set booking_status = 'expired',
+           updated_at = clock_timestamp()
+      from sooma_wellness.customers c
+     where b.customer_id = c.customer_id
+       and c.user_id = :user_id
+       and lower(trim(b.booking_status)) = 'waiting_payment'
+       and coalesce(b.expires_at, b.booked_at + interval '30 minutes') <= clock_timestamp()
+");
+$expireStmt->execute([':user_id' => $userId]);
+
+// Endpoint ringan untuk dipanggil otomatis oleh JS saat countdown menyentuh 00:00
+if (isset($_GET['sync_expire']) && $_GET['sync_expire'] === '1') {
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['ok' => true, 'updated' => $expireStmt->rowCount()]);
+    exit;
+}
 
 $stmt = $pdo->prepare("
     select b.booking_id as id,
            coalesce(b.booking_code, 'BK-' || lpad(b.booking_id::text, 4, '0')) as code,
            b.booking_status,
+           coalesce(b.expires_at, b.booked_at + interval '30 minutes') as effective_expires_at,
+           greatest(
+               0,
+               ceil(extract(epoch from (coalesce(b.expires_at, b.booked_at + interval '30 minutes') - clock_timestamp())))
+           )::int as remaining_seconds,
+           coalesce(nullif(to_jsonb(b)->>'private_request_id', ''), nullif(to_jsonb(b)->>'request_id', ''), '') as private_request_id,
+           (
+               lower(coalesce(nullif(to_jsonb(b)->>'class_type', ''), cs.class_type, '')) like '%private%'
+               or lower(coalesce(mc.class_name, '')) like '%private%'
+               or upper(ltrim(coalesce(b.booking_code, ''), '#')) like 'REQ%'
+               or coalesce(nullif(to_jsonb(b)->>'private_request_id', ''), nullif(to_jsonb(b)->>'request_id', ''), '') <> ''
+           ) as is_private_req,
            p.payment_proof,
            p.verification_status,
            coalesce(nullif(to_jsonb(p)->>'admin_note', ''), nullif(to_jsonb(p)->>'rejection_reason', ''), '') as admin_note,
@@ -62,22 +102,24 @@ $attStmt = $pdo->prepare("
 
 $transactions = [];
 foreach ($dbRows as $r) {
-    $bStatus = (string) $r['booking_status'];
-    $vStatus = strtolower((string) ($r['verification_status'] ?? ''));
+    $bStatus      = strtolower(trim((string) $r['booking_status']));
+    $vStatus      = strtolower(trim((string) ($r['verification_status'] ?? '')));
+    $hasProof     = !empty($r['payment_proof']);
+    $remainingSec = (int) ($r['remaining_seconds'] ?? 0);
 
     if ($vStatus === 'rejected' || $bStatus === 'rejected') {
         $tabKey = 'history';
         $label  = 'Rejected';
-    } elseif ($bStatus === 'expired') {
+    } elseif ($bStatus === 'expired' || ($bStatus === 'waiting_payment' && $remainingSec <= 0)) {
         $tabKey = 'history';
         $label  = 'Expired';
     } elseif ($bStatus === 'cancelled') {
         $tabKey = 'history';
         $label  = 'Cancelled';
-    } elseif ($bStatus === 'confirmed' || $bStatus === 'completed' || in_array($vStatus, ['verified', 'approved', 'confirmed', 'paid'], true)) {
+    } elseif (in_array($bStatus, ['confirmed', 'completed'], true) || in_array($vStatus, ['verified', 'approved', 'confirmed', 'paid'], true)) {
         $tabKey = 'history';
         $label  = 'Successful';
-    } elseif ($bStatus === 'waiting_verification' || (!empty($r['payment_proof']) && $vStatus === 'pending')) {
+    } elseif ($bStatus === 'waiting_verification' || ($hasProof && $vStatus === 'pending')) {
         $tabKey = 'pending';
         $label  = 'Waiting Verification';
     } else {
@@ -98,24 +140,28 @@ foreach ($dbRows as $r) {
         $attendees[] = ['name' => $user_name, 'is_you' => true];
     }
 
+    $isPrivate = filter_var($r['is_private_req'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
     $transactions[] = [
-        'id'           => (int) $r['id'],
-        'code'         => '#' . ltrim((string) $r['code'], '#'),
-        'status'       => $tabKey,
-        'status_label' => $label,
-        'admin_note'   => (string) ($r['admin_note'] ?? ''),
-        'date'         => $r['date'],
-        'time_start'   => $r['time_start'],
-        'time_end'     => $r['time_end'],
-        'class_name'   => $r['class_name'],
-        'category'     => $r['class_name'],
-        'type'         => $r['type'],
-        'level'        => $r['level'],
-        'coach'        => $r['coach'],
-        'location'     => $location,
-        'image'        => '../assets/images/gallery-main.png',
-        'attendees'    => $attendees,
-        'is_package'   => false,
+        'id'                => (int) $r['id'],
+        'code'              => '#' . ltrim((string) $r['code'], '#'),
+        'status'            => $tabKey,
+        'status_label'      => $label,
+        'remaining_seconds' => ($tabKey === 'unpaid') ? $remainingSec : null,
+        'admin_note'        => (string) ($r['admin_note'] ?? ''),
+        'date'              => $r['date'],
+        'time_start'        => $r['time_start'],
+        'time_end'          => $r['time_end'],
+        'class_name'        => $r['class_name'],
+        'category'          => $r['class_name'],
+        'type'              => $isPrivate ? 'Private' : $r['type'],
+        'level'             => $r['level'],
+        'coach'             => $r['coach'],
+        'location'          => $location,
+        'image'             => '../assets/images/gallery-main.png',
+        'attendees'         => $attendees,
+        'is_package'        => false,
+        'is_private'        => $isPrivate,
     ];
 }
 
@@ -159,7 +205,7 @@ foreach ($pkgStmt->fetchAll(PDO::FETCH_ASSOC) as $pr) {
         $label  = 'Successful';
     } elseif ($hasProof || $vStatus === 'waiting_verification') {
         $tabKey = 'pending';
-        $label  = 'Pending';
+        $label  = 'Waiting Verification';
     } else {
         $tabKey = 'pending';
         $label  = 'Pending';
@@ -171,23 +217,25 @@ foreach ($pkgStmt->fetchAll(PDO::FETCH_ASSOC) as $pr) {
     $timeStr = str_replace(':', '.', $timeStr);
 
     $transactions[] = [
-        'id'           => 900000 + (int) $pr['user_package_id'],
-        'code'         => '#' . ltrim((string) $pr['code'], '#'),
-        'status'       => $tabKey,
-        'status_label' => $label,
-        'admin_note'   => (string) ($pr['admin_note'] ?? ''),
-        'date'         => $isoDate,
-        'time_start'   => $timeStr,
-        'time_end'     => 'WIB',
-        'class_name'   => (string) $pr['package_name'],
-        'category'     => (string) $pr['package_name'] . ' (' . (int) $pr['total_sessions'] . ' Sessions)',
-        'type'         => 'Package',
-        'level'        => (int) $pr['active_days'] . ' Days',
-        'coach'        => 'Rp ' . number_format((float) $pr['amount'], 0, ',', '.'),
-        'location'     => $location,
-        'image'        => '../assets/images/gallery-main.png',
-        'attendees'    => [['name' => $user_name, 'is_you' => true]],
-        'is_package'   => true,
+        'id'                => 900000 + (int) $pr['user_package_id'],
+        'code'              => '#' . ltrim((string) $pr['code'], '#'),
+        'status'            => $tabKey,
+        'status_label'      => $label,
+        'remaining_seconds' => null,
+        'admin_note'        => (string) ($pr['admin_note'] ?? ''),
+        'date'              => $isoDate,
+        'time_start'        => $timeStr,
+        'time_end'          => 'WIB',
+        'class_name'        => (string) $pr['package_name'],
+        'category'          => (string) $pr['package_name'] . ' (' . (int) $pr['total_sessions'] . ' Sessions)',
+        'type'              => 'Package',
+        'level'             => (int) $pr['active_days'] . ' Days',
+        'coach'             => 'Rp ' . number_format((float) $pr['amount'], 0, ',', '.'),
+        'location'          => $location,
+        'image'             => '../assets/images/gallery-main.png',
+        'attendees'         => [['name' => $user_name, 'is_you' => true]],
+        'is_package'        => true,
+        'is_private'        => false,
     ];
 }
 
@@ -205,9 +253,11 @@ $profile_menu = [
     ['label' => 'My request',         'href' => 'profile-private-request.php', 'icon' => 'ph ph-paper-plane-tilt'],
 ];
 
-function e(?string $value): string
-{
-    return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+if (!function_exists('e')) {
+    function e(?string $value): string
+    {
+        return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+    }
 }
 
 function format_short_date(string $iso): string
@@ -231,9 +281,16 @@ function format_time_range(string $start, string $end, bool $isPackage = false):
     return $start . ' - ' . $end . ' WIB';
 }
 
-$tab = $_GET['tab'] ?? 'pending';
-if (!is_string($tab) || !array_key_exists($tab, $tabs)) {
-    $tab = 'pending';
+function format_countdown_text(int $seconds): string
+{
+    $seconds = max(0, $seconds);
+    $hours   = intdiv($seconds, 3600);
+    $mins    = intdiv($seconds % 3600, 60);
+    $secs    = $seconds % 60;
+    if ($hours > 0) {
+        return sprintf('%02d:%02d:%02d', $hours, $mins, $secs);
+    }
+    return sprintf('%02d:%02d', $mins, $secs);
 }
 
 $counts = array_fill_keys(array_keys($tabs), 0);
@@ -241,6 +298,11 @@ foreach ($transactions as $t) {
     if (isset($counts[$t['status']])) {
         $counts[$t['status']]++;
     }
+}
+
+$tab = $_GET['tab'] ?? ($counts['unpaid'] > 0 ? 'unpaid' : 'pending');
+if (!is_string($tab) || !array_key_exists($tab, $tabs)) {
+    $tab = 'pending';
 }
 
 $rows = array_values(array_filter($transactions, fn(array $t): bool => $t['status'] === $tab));
@@ -251,8 +313,18 @@ $empty_messages = [
     'history' => 'No transaction history yet.',
 ];
 
+// Sesuaikan path payment.php jika berbeda folder (misalnya '../booking/payment.php')
+$paymentBasePath = file_exists(__DIR__ . '/payment.php')
+    ? './payment.php'
+    : (file_exists(__DIR__ . '/../booking/payment.php') ? '../booking/payment.php' : '../payment.php');
+
 $modal_payload = [];
 foreach ($transactions as $t) {
+    $payUrl = $paymentBasePath . '?id=' . urlencode((string) $t['id']);
+    if (!empty($t['is_private'])) {
+        $payUrl .= '&type=private';
+    }
+
     $modal_payload[(string) $t['id']] = [
         'image'            => $t['image'],
         'class_name'       => $t['class_name'],
@@ -268,6 +340,8 @@ foreach ($transactions as $t) {
         'attendees'        => $t['attendees'],
         'admin_note'       => $t['admin_note'] !== '' ? $t['admin_note'] : '-',
         'status_label'     => $t['status_label'],
+        'is_private'       => !empty($t['is_private']),
+        'pay_url'          => $payUrl,
     ];
 }
 $sidebar_current     = basename($_SERVER['SCRIPT_NAME'] ?? 'profile-transaction.php');
@@ -328,20 +402,21 @@ $navbar_profile_href = 'profile.php';
                     <?php if ($i++ > 0): ?><span class="txn-tabs__sep" aria-hidden="true"></span><?php endif; ?>
                     <a class="txn-tabs__item<?= $key === $tab ? ' active' : '' ?>"
                         href="?tab=<?= e($key) ?>"
+                        data-tab-key="<?= e($key) ?>"
                         <?= $key === $tab ? 'aria-current="true"' : '' ?>>
                         <span class="txn-tabs__label"><?= e($label) ?></span>
-                        <span class="txn-tabs__count" aria-label="<?= (int) $counts[$key] ?> transactions"><?= (int) $counts[$key] ?></span>
+                        <span class="txn-tabs__count" data-tab-count="<?= e($key) ?>" aria-label="<?= (int) $counts[$key] ?> transactions"><?= (int) $counts[$key] ?></span>
                     </a>
                 <?php endforeach; ?>
             </nav>
 
-            <section aria-label="<?= e($tabs[$tab]) ?> transactions">
+            <section aria-label="<?= e($tabs[$tab]) ?> transactions" id="txnListSection" data-active-tab="<?= e($tab) ?>">
                 <?php if (empty($rows)): ?>
                     <p class="txn-empty"><?= e($empty_messages[$tab]) ?></p>
                 <?php else: ?>
                     <ul class="txn-list">
                         <?php foreach ($rows as $t): ?>
-                            <li class="txn-card">
+                            <li class="txn-card" data-card-id="<?= (int) $t['id'] ?>">
                                 <div class="txn-info">
                                     <div class="txn-field txn-field--date">
                                         <span class="visually-hidden">Date/Time: </span>
@@ -356,7 +431,17 @@ $navbar_profile_href = 'profile.php';
 
                                     <div class="txn-field">
                                         <strong class="txn-field__label">Status</strong>
-                                        <span><?= e($t['status_label']) ?></span>
+                                        <span class="js-txn-status-label"><?= e($t['status_label']) ?></span>
+
+                                        <?php if ($tab === 'unpaid' && $t['remaining_seconds'] !== null): ?>
+                                            <small class="txn-countdown js-txn-countdown"
+                                                data-remaining="<?= (int) $t['remaining_seconds'] ?>"
+                                                style="display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; color: #b42318; font-weight: 600; font-variant-numeric: tabular-nums;">
+                                                <i class="ph ph-clock" aria-hidden="true"></i>
+                                                <span>Pay within <strong class="js-txn-countdown-time"><?= e(format_countdown_text((int) $t['remaining_seconds'])) ?></strong></span>
+                                            </small>
+                                        <?php endif; ?>
+
                                         <?php if ($t['status_label'] === 'Rejected' && $t['admin_note'] !== ''): ?>
                                             <small class="txn-note">Note: <?= e($t['admin_note']) ?></small>
                                         <?php endif; ?>
@@ -368,8 +453,16 @@ $navbar_profile_href = 'profile.php';
 
                                     <div class="txn-action__buttons">
                                         <?php if ($tab === 'unpaid' && !$t['is_package']): ?>
-                                            <a href="./payment.php?id=<?= urlencode((string) $t['id']) ?>"
-                                                class="btn-show-details">
+                                            <?php
+                                            $payUrl = $paymentBasePath . '?id=' . urlencode((string) $t['id']);
+                                            if (!empty($t['is_private'])) {
+                                                $payUrl .= '&type=private';
+                                            }
+                                            ?>
+                                            <a href="<?= e($payUrl) ?>"
+                                                class="btn-show-details js-paid-now-btn"
+                                                data-pay-url="<?= e($payUrl) ?>"
+                                                data-is-private="<?= !empty($t['is_private']) ? '1' : '0' ?>">
                                                 Paid Now
                                             </a>
                                         <?php endif; ?>

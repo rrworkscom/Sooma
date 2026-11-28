@@ -35,20 +35,35 @@ $stmt = $pdo->prepare("
            coalesce(to_jsonb(rc)->>'admin_note', '') as admin_note,
            mc.class_name,
            mc.price,
+           b_link.booking_id as linked_booking_id,
            b_link.booking_code as linked_booking_code,
-           lower(coalesce(b_link.booking_status, '')) as linked_booking_status
+           lower(coalesce(b_link.booking_status, '')) as linked_booking_status,
+           lower(coalesce(b_link.verification_status, '')) as linked_verif_status,
+           b_link.payment_proof as linked_payment_proof
       from sooma_wellness.request_classes rc
       join sooma_wellness.customers c on c.customer_id = rc.customer_id
       join sooma_wellness.master_classes mc on mc.class_id = rc.class_id
       left join lateral (
-          select coalesce(b.booking_code, 'BK-' || lpad(b.booking_id::text, 4, '0')) as booking_code,
-                 b.booking_status
+          select b.booking_id,
+                 coalesce(b.booking_code, 'BK-' || lpad(b.booking_id::text, 4, '0')) as booking_code,
+                 b.booking_status,
+                 p.verification_status,
+                 p.payment_proof
             from sooma_wellness.bookings b
-            join sooma_wellness.class_schedules cs on cs.schedule_id = b.schedule_id
+            join sooma_wellness.class_schedules cs on cs.schedule_id = coalesce(b.reschedule_schedule_id, b.schedule_id)
+            left join sooma_wellness.payments p on p.payment_id = b.payment_id
            where b.customer_id = rc.customer_id
-             and cs.class_id = rc.class_id
-             and cs.schedule_date = rc.preferred_date
-             and cs.start_time = rc.preferred_time
+             and (
+                 to_jsonb(rc)->>'booking_id' = b.booking_id::text
+                 or to_jsonb(rc)->>'schedule_id' = cs.schedule_id::text
+                 or to_jsonb(b)->>'private_request_id' = rc.request_id::text
+                 or to_jsonb(b)->>'request_id' = rc.request_id::text
+                 or (
+                     cs.class_id = rc.class_id
+                     and cs.schedule_date = rc.preferred_date
+                     and cs.start_time = rc.preferred_time
+                 )
+             )
            order by b.booking_id desc
            limit 1
       ) b_link on true
@@ -62,58 +77,63 @@ $requests = [];
 foreach ($dbRows as $r) {
     $rawStatus    = strtolower(trim((string) ($r['status'] ?? 'pending')));
     $linkedStatus = strtolower(trim((string) ($r['linked_booking_status'] ?? '')));
+    $linkedVerif  = strtolower(trim((string) ($r['linked_verif_status'] ?? '')));
+    $hasProof     = !empty($r['linked_payment_proof']);
     $attendees    = max(1, (int) ($r['attendee_count'] ?? 1));
     $totalPrice   = (float) $r['price'] * $attendees;
     $isApproved   = in_array($rawStatus, ['approved', 'accepted', 'confirmed'], true);
+    $showTxCta    = false;
 
     if ($rawStatus === 'pending') {
-        $tabKey      = 'pending';
-        $label       = 'Waiting Approval';
-        $paymentNote = 'Waiting for studio admin confirmation.';
+        $tabKey = 'pending';
+        $label  = 'Waiting Approval';
     } else {
         $tabKey = 'history';
         if ($isApproved) {
-            $label = 'Approved';
-            if ($linkedStatus === 'confirmed' || $linkedStatus === 'completed') {
-                $paymentNote = 'Paid & Confirmed';
-            } elseif ($linkedStatus === 'waiting_verification') {
-                $paymentNote = 'Waiting Payment Verification in My Transaction';
+            $hasPaid = $hasProof
+                || in_array($linkedStatus, ['waiting_verification', 'confirmed', 'completed'], true)
+                || in_array($linkedVerif, ['pending', 'verified', 'approved', 'confirmed', 'paid'], true);
+
+            $isRejectedPayment = ($linkedStatus === 'rejected' || $linkedVerif === 'rejected');
+
+            if ($hasPaid && !$isRejectedPayment) {
+                $label     = 'Approved';
+                $showTxCta = false;
             } elseif ($linkedStatus === 'expired') {
-                $paymentNote = 'Payment Expired';
+                $label     = 'Approved (Payment Expired)';
+                $showTxCta = false;
             } else {
-                $paymentNote = 'Waiting Payment — Complete payment in My Transaction';
+                $label     = 'Approved (Waiting Payment — Complete payment in My Transaction)';
+                $showTxCta = true;
             }
         } elseif ($rawStatus === 'rejected') {
-            $label       = 'Rejected';
-            $paymentNote = 'Declined by studio admin.';
+            $label = 'Rejected';
         } elseif ($rawStatus === 'cancelled') {
-            $label       = 'Cancelled';
-            $paymentNote = 'Request cancelled.';
+            $label = 'Cancelled';
         } else {
-            $label       = ucfirst($rawStatus);
-            $paymentNote = '-';
+            $label = ucfirst($rawStatus);
         }
     }
 
     $requests[] = [
-        'id'            => (int) $r['id'],
-        'code'          => '#REQ-' . str_pad((string) $r['id'], 4, '0', STR_PAD_LEFT),
-        'booking_code'  => !empty($r['linked_booking_code']) ? '#' . ltrim((string) $r['linked_booking_code'], '#') : '',
-        'status'        => $tabKey,
-        'status_label'  => $label,
-        'payment_note'  => $paymentNote,
-        'show_tx_cta'   => $isApproved && ($linkedStatus === '' || $linkedStatus === 'waiting_payment'),
-        'date'          => (string) $r['date'],
-        'time_start'    => (string) $r['time_start'],
-        'time_end'      => (string) $r['time_end'],
-        'class_name'    => (string) $r['class_name'],
-        'coach'         => (string) $r['preferred_coach'],
-        'attendee_text' => $attendees . ($attendees === 1 ? ' Person' : ' People'),
-        'price'         => 'Rp ' . number_format($totalPrice, 0, ',', '.'),
-        'medical_notes' => trim((string) $r['medical_notes']) !== '' ? trim((string) $r['medical_notes']) : '-',
-        'admin_note'    => trim((string) ($r['admin_note'] ?? '')),
-        'location'      => $location,
-        'image'         => '../assets/images/gallery-main.png',
+        'id'                => (int) $r['id'],
+        'code'              => '#REQ-' . str_pad((string) $r['id'], 4, '0', STR_PAD_LEFT),
+        'booking_code'      => !empty($r['linked_booking_code']) ? '#' . ltrim((string) $r['linked_booking_code'], '#') : '',
+        'linked_booking_id' => (int) ($r['linked_booking_id'] ?? 0),
+        'status'            => $tabKey,
+        'status_label'      => $label,
+        'show_tx_cta'       => $showTxCta,
+        'date'              => (string) $r['date'],
+        'time_start'        => (string) $r['time_start'],
+        'time_end'          => (string) $r['time_end'],
+        'class_name'        => (string) $r['class_name'],
+        'coach'             => (string) $r['preferred_coach'],
+        'attendee_text'     => $attendees . ($attendees === 1 ? ' Person' : ' People'),
+        'price'             => 'Rp ' . number_format($totalPrice, 0, ',', '.'),
+        'medical_notes'     => trim((string) $r['medical_notes']) !== '' ? trim((string) $r['medical_notes']) : '-',
+        'admin_note'        => trim((string) ($r['admin_note'] ?? '')),
+        'location'          => $location,
+        'image'             => '../assets/images/gallery-main.png',
     ];
 }
 
@@ -148,16 +168,16 @@ function format_long_date(string $iso): string
     return $ts ? date('l, j F Y', $ts) : '--';
 }
 
-$tab = $_GET['tab'] ?? 'pending';
-if (!is_string($tab) || !array_key_exists($tab, $tabs)) {
-    $tab = 'pending';
-}
-
 $counts = array_fill_keys(array_keys($tabs), 0);
 foreach ($requests as $req) {
     if (isset($counts[$req['status']])) {
         $counts[$req['status']]++;
     }
+}
+
+$tab = $_GET['tab'] ?? 'pending';
+if (!is_string($tab) || !array_key_exists($tab, $tabs)) {
+    $tab = 'pending';
 }
 
 $rows = array_values(array_filter($requests, fn(array $req): bool => $req['status'] === $tab));
@@ -178,10 +198,11 @@ foreach ($requests as $req) {
         'time_range'       => $req['time_start'] . ' - ' . $req['time_end'] . ' WIB',
         'session_meta'     => 'Private Class • ' . $req['attendee_text'] . ' • Coach: ' . $req['coach'],
         'price'            => $req['price'],
-        'status_label'     => $req['status_label'] . ' (' . $req['payment_note'] . ')',
+        'status_label'     => $req['status_label'],
         'medical_notes'    => $req['medical_notes'],
         'admin_note'       => $req['admin_note'],
         'show_tx_cta'      => $req['show_tx_cta'],
+        'tx_url'           => 'profile-transaction.php?tab=unpaid',
         'location_name'    => $req['location']['name'],
         'location_address' => $req['location']['address'],
     ];
@@ -281,6 +302,14 @@ $navbar_profile_href = 'profile.php';
                                     <span class="txn-action__label">Action</span>
 
                                     <div class="txn-action__buttons">
+                                        <?php if ($req['show_tx_cta']): ?>
+                                            <a href="profile-transaction.php?tab=unpaid"
+                                                class="btn-show-details"
+                                                style="text-decoration: none;">
+                                                My Transaction
+                                            </a>
+                                        <?php endif; ?>
+
                                         <button type="button"
                                             class="btn-show-details js-show-request-details"
                                             data-id="<?= (int) $req['id'] ?>">
@@ -391,8 +420,8 @@ $navbar_profile_href = 'profile.php';
                         </li>
                     </ul>
 
-                    <div id="requestTxCta" hidden style="margin-top: 18px; display: flex; justify-content: flex-end;">
-                        <a href="profile-transaction.php" class="btn-show-details" style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center; padding: 10px 20px;">
+                    <div id="requestTxCta" hidden style="margin-top: 18px; justify-content: flex-end;">
+                        <a id="requestTxCtaLink" href="profile-transaction.php?tab=unpaid" class="btn-show-details" style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center; padding: 10px 20px;">
                             Go to My Transaction
                         </a>
                     </div>
@@ -420,6 +449,7 @@ $navbar_profile_href = 'profile.php';
             var closeBtn     = overlay.querySelector('.modal__close');
             var adminNoteRow = document.getElementById('requestAdminNoteRow');
             var txCta        = document.getElementById('requestTxCta');
+            var txCtaLink    = document.getElementById('requestTxCtaLink');
             var lastTrigger  = null;
 
             function openModal(id, trigger) {
@@ -444,6 +474,9 @@ $navbar_profile_href = 'profile.php';
                 if (txCta) {
                     txCta.hidden = !item.show_tx_cta;
                     txCta.style.display = item.show_tx_cta ? 'flex' : 'none';
+                }
+                if (txCtaLink && item.tx_url) {
+                    txCtaLink.href = item.tx_url;
                 }
 
                 overlay.classList.add('is-open');

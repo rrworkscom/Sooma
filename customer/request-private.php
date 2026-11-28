@@ -516,7 +516,6 @@ require __DIR__ . '/../includes/header.php';
                                     <div class="bd-field">
                                         <div class="rp-label-row">
                                             <label class="bd-label" for="rp-date">Preferred Day &amp; Date</label>
-                                            <span class="rp-date-range-hint">Today &ndash; <?= e($maxDateObj->format('j M Y')) ?></span>
                                         </div>
                                         <input type="date"
                                             class="bd-input"
