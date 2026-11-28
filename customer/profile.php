@@ -85,9 +85,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
                     $stmt = $pdo->prepare(
                         "UPDATE sooma_wellness.users
-                      SET password = :hash, encrypted_password = :enc
-                      WHERE user_id = :id
-                      RETURNING email, name"
+                         SET password = :hash, encrypted_password = :enc
+                         WHERE user_id = :id
+                         RETURNING email, name"
                     );
                     $stmt->execute(['hash' => $hash, 'enc' => $enc, 'id' => $userId]);
                     $updatedUser = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -143,59 +143,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     }
 
     if ($action === 'update_avatar' && isset($_FILES['avatar']) && $userId) {
-        $file = $_FILES['avatar'];
-        if ($file['error'] === UPLOAD_ERR_OK) {
-            $allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+        try {
+            require_once __DIR__ . '/../includes/db_image_upload.php';
 
-            if (function_exists('finfo_open')) {
-                $finfo = finfo_open(FILEINFO_MIME_TYPE);
-                $mime  = finfo_file($finfo, $file['tmp_name']);
-                finfo_close($finfo);
-            } else {
-                $imgInfo = @getimagesize($file['tmp_name']);
-                $mime    = $imgInfo['mime'] ?? '';
-            }
+            $base64DataUri = sw_uploaded_image_to_data_uri($_FILES['avatar'], 300, 75, 5242880);
 
-            if (!in_array($mime, $allowedTypes, true)) {
-                $_SESSION['profile_flash_error'] = 'Only JPG, PNG, or WEBP images are allowed.';
-            } elseif ($file['size'] > 2 * 1024 * 1024) {
-                $_SESSION['profile_flash_error'] = 'Image size must be less than 2MB.';
-            } else {
-                $binaryData = file_get_contents($file['tmp_name']);
+            $stmt = $pdo->prepare("UPDATE sooma_wellness.users SET avatar_url = :avatar WHERE user_id = :id");
+            $stmt->execute(['avatar' => $base64DataUri, 'id' => $userId]);
 
-                if (function_exists('imagecreatefromstring')) {
-                    $srcImg = @imagecreatefromstring($binaryData);
-                    if ($srcImg !== false) {
-                        $origW  = imagesx($srcImg);
-                        $origH  = imagesy($srcImg);
-                        $maxDim = 150;
-
-                        if ($origW > $maxDim || $origH > $maxDim) {
-                            $ratio  = min($maxDim / $origW, $maxDim / $origH);
-                            $newW   = (int) round($origW * $ratio);
-                            $newH   = (int) round($origH * $ratio);
-                            $dstImg = imagecreatetruecolor($newW, $newH);
-                            imagecopyresampled($dstImg, $srcImg, 0, 0, 0, 0, $newW, $newH, $origW, $origH);
-                            imagedestroy($srcImg);
-                            $srcImg = $dstImg;
-                        }
-
-                        ob_start();
-                        imagejpeg($srcImg, null, 70);
-                        $binaryData = ob_get_clean();
-                        imagedestroy($srcImg);
-                        $mime = 'image/jpeg';
-                    }
-                }
-
-                $base64DataUri = 'data:' . $mime . ';base64,' . base64_encode($binaryData);
-
-                $stmt = $pdo->prepare("UPDATE sooma_wellness.users SET avatar_url = :avatar WHERE user_id = :id");
-                $stmt->execute(['avatar' => $base64DataUri, 'id' => $userId]);
-
-                $_SESSION['user']['avatar_url'] = $base64DataUri;
-                $_SESSION['profile_flash_success'] = 'Profile photo updated successfully.';
-            }
+            $_SESSION['user']['avatar_url'] = $base64DataUri;
+            $_SESSION['profile_flash_success'] = 'Profile photo updated successfully.';
+        } catch (Throwable $e) {
+            $_SESSION['profile_flash_error'] = $e->getMessage();
         }
     }
 

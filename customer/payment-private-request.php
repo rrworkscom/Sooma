@@ -23,22 +23,93 @@ if (!function_exists('e')) {
     }
 }
 
-function ppr_detect_type(string $path): ?array
-{
-    $h = @file_get_contents($path, false, null, 0, 12);
-    if ($h === false || strlen($h) < 4) {
-        return null;
+if (!function_exists('sw_uploaded_image_to_data_uri')) {
+    function sw_uploaded_image_to_data_uri(
+        array $file,
+        int $maxDim = 900,
+        int $quality = 75,
+        int $maxBytes = 5242880
+    ): string {
+        if (!isset($file['error']) || $file['error'] !== UPLOAD_ERR_OK) {
+            throw new RuntimeException('File upload failed or no file was selected.');
+        }
+
+        if (!is_uploaded_file($file['tmp_name'])) {
+            throw new RuntimeException('Invalid uploaded file source.');
+        }
+
+        if (($file['size'] ?? 0) > $maxBytes) {
+            $maxMb = (int) round($maxBytes / (1024 * 1024));
+            throw new RuntimeException("Image size must be less than {$maxMb}MB.");
+        }
+
+        $allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+        if (function_exists('finfo_open')) {
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $mime  = finfo_file($finfo, $file['tmp_name']);
+            finfo_close($finfo);
+        } else {
+            $imgInfo = @getimagesize($file['tmp_name']);
+            $mime    = $imgInfo['mime'] ?? '';
+        }
+
+        if (!in_array($mime, $allowedTypes, true)) {
+            throw new RuntimeException('Only JPG, PNG, or WEBP images are allowed.');
+        }
+
+        $binaryData = file_get_contents($file['tmp_name']);
+        if ($binaryData === false || $binaryData === '') {
+            throw new RuntimeException('Unable to read uploaded image.');
+        }
+
+        if (function_exists('imagecreatefromstring')) {
+            $srcImg = @imagecreatefromstring($binaryData);
+            if ($srcImg !== false) {
+                if ($mime === 'image/jpeg' && function_exists('exif_read_data')) {
+                    $exif = @exif_read_data($file['tmp_name']);
+                    $orientation = (int) ($exif['Orientation'] ?? 1);
+                    if ($orientation === 3) {
+                        $srcImg = imagerotate($srcImg, 180, 0);
+                    } elseif ($orientation === 6) {
+                        $srcImg = imagerotate($srcImg, -90, 0);
+                    } elseif ($orientation === 8) {
+                        $srcImg = imagerotate($srcImg, 90, 0);
+                    }
+                }
+
+                $origW = imagesx($srcImg);
+                $origH = imagesy($srcImg);
+
+                if ($origW > $maxDim || $origH > $maxDim) {
+                    $ratio = min($maxDim / $origW, $maxDim / $origH);
+                    $newW  = max(1, (int) round($origW * $ratio));
+                    $newH  = max(1, (int) round($origH * $ratio));
+                } else {
+                    $newW = $origW;
+                    $newH = $origH;
+                }
+
+                $dstImg = imagecreatetruecolor($newW, $newH);
+                $white = imagecolorallocate($dstImg, 255, 255, 255);
+                imagefilledrectangle($dstImg, 0, 0, $newW, $newH, $white);
+                imagecopyresampled($dstImg, $srcImg, 0, 0, 0, 0, $newW, $newH, $origW, $origH);
+
+                ob_start();
+                imagejpeg($dstImg, null, $quality);
+                $compressed = ob_get_clean();
+
+                imagedestroy($srcImg);
+                imagedestroy($dstImg);
+
+                if ($compressed !== false && $compressed !== '') {
+                    $binaryData = $compressed;
+                    $mime       = 'image/jpeg';
+                }
+            }
+        }
+
+        return 'data:' . $mime . ';base64,' . base64_encode($binaryData);
     }
-    if (strncmp($h, "\xFF\xD8\xFF", 3) === 0) {
-        return ['ext' => 'jpg', 'mime' => 'image/jpeg'];
-    }
-    if (strncmp($h, "\x89PNG", 4) === 0) {
-        return ['ext' => 'png', 'mime' => 'image/png'];
-    }
-    if (strncmp($h, 'RIFF', 4) === 0 && substr($h, 8, 4) === 'WEBP') {
-        return ['ext' => 'webp', 'mime' => 'image/webp'];
-    }
-    return null;
 }
 
 function ppr_normalize_program(string $raw): string
@@ -442,56 +513,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'payment_proof' && $paymentMethod === 'dropin') {
         $f = $_FILES['receipt'] ?? null;
 
-        if (!$f || $f['error'] === UPLOAD_ERR_NO_FILE) {
+        if (!$f || ($f['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
             $reply(false, 'Please choose a payment receipt first.');
         }
-        if ($f['error'] === UPLOAD_ERR_INI_SIZE || $f['error'] === UPLOAD_ERR_FORM_SIZE || $f['size'] > $maxBytes) {
-            $reply(false, 'File is too large. Maximum size is 5 MB.');
-        }
-        if ($f['error'] !== UPLOAD_ERR_OK || !is_uploaded_file($f['tmp_name'])) {
-            $reply(false, 'Upload failed. Please try again.', 500);
-        }
 
-        $detected = ppr_detect_type($f['tmp_name']);
-        if ($detected === null) {
-            $reply(false, 'Only JPG, PNG, or WEBP images are allowed.');
+        try {
+            $proofDataUri = sw_uploaded_image_to_data_uri($f, 900, 75, $maxBytes);
+        } catch (RuntimeException $ex) {
+            $reply(false, $ex->getMessage(), 422);
         }
 
-        $binaryData = @file_get_contents($f['tmp_name']);
-        if ($binaryData === false) {
-            $reply(false, 'Could not read the uploaded file. Please try again.', 500);
-        }
-
-        $mime = $detected['mime'];
-
-        if (function_exists('imagecreatefromstring')) {
-            $srcImg = @imagecreatefromstring($binaryData);
-            if ($srcImg !== false) {
-                $origW  = imagesx($srcImg);
-                $origH  = imagesy($srcImg);
-                $maxDim = 900;
-
-                if ($origW > $maxDim || $origH > $maxDim) {
-                    $ratio  = min($maxDim / $origW, $maxDim / $origH);
-                    $newW   = (int) round($origW * $ratio);
-                    $newH   = (int) round($origH * $ratio);
-                    $dstImg = imagecreatetruecolor($newW, $newH);
-                    imagecopyresampled($dstImg, $srcImg, 0, 0, 0, 0, $newW, $newH, $origW, $origH);
-                    imagedestroy($srcImg);
-                    $srcImg = $dstImg;
-                }
-
-                ob_start();
-                imagejpeg($srcImg, null, 78);
-                $binaryData = ob_get_clean();
-                imagedestroy($srcImg);
-                $mime = 'image/jpeg';
-            }
-        }
-
-        $proofDataUri = 'data:' . $mime . ';base64,' . base64_encode($binaryData);
-        $amount       = max(0, (int) $booking['total_payment']);
-        $step         = 'init';
+        $amount = max(0, (int) $booking['total_payment']);
+        $step   = 'init';
 
         try {
             $pdo->beginTransaction();

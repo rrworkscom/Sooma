@@ -35,6 +35,21 @@
             .replace(/"/g, '&quot;');
     }
 
+    function resolveReceiptSrc(raw) {
+        var val = String(raw || '').trim();
+        if (!val) return '';
+        if (/^data:/i.test(val)) {
+            return val.replace(/[\r\n\s]+/g, '');
+        }
+        if (/^(https?:\/\/|\.\.\/|\/)/i.test(val)) {
+            return val;
+        }
+        if (/^uploads\//i.test(val)) {
+            return '../' + val;
+        }
+        return '../uploads/receipts/' + encodeURIComponent(val);
+    }
+
     function formatDateDisplay(isoOrSql) {
         if (!isoOrSql) return '-';
         var clean = String(isoOrSql).slice(0, 10);
@@ -114,13 +129,7 @@
 
         var dateRaw = String(row.purchase_date || '');
         var dateIso = dateRaw.slice(0, 10);
-        var proofFile = String(row.payment_proof || '').trim();
-        var receiptUrl = '';
-        if (proofFile) {
-            receiptUrl = /^https?:\/\//i.test(proofFile)
-                ? proofFile
-                : '../uploads/receipts/' + encodeURIComponent(proofFile.replace(/^\/+/, ''));
-        }
+        var receiptUrl = resolveReceiptSrc(row.payment_proof);
 
         var noteText = String(row.rejection_reason || row.admin_note || '').trim();
         if (!noteText && uiStatus === 'confirmed') {
@@ -280,18 +289,18 @@
                     '<td>' + escapeHtml(p.order_id) + '</td>' +
                     '<td>' + escapeHtml(p.customer) + '</td>' +
                     '<td><div class="pkg-name-cell">' +
-                        '<span class="pkg-name-cell__title">' + escapeHtml(p.package_name) + '</span>' +
-                        '<span class="pkg-name-cell__variant">' + escapeHtml(p.variant) + '</span>' +
+                    '<span class="pkg-name-cell__title">' + escapeHtml(p.package_name) + '</span>' +
+                    '<span class="pkg-name-cell__variant">' + escapeHtml(p.variant) + '</span>' +
                     '</div></td>' +
                     '<td>' + escapeHtml(p.date_display) + '</td>' +
                     '<td class="pkg-price-cell">' + formatRupiah(p.amount) + '</td>' +
                     '<td><button type="button" class="status-badge status-badge--' + p.status + ' js-open-receipt" data-id="' + p.id + '">' +
-                        (labels[p.status] || p.status) + '</button></td>' +
+                    (labels[p.status] || p.status) + '</button></td>' +
                     '<td><div class="row-actions">' +
-                        '<button type="button" class="icon-btn js-open-receipt" data-id="' + p.id + '" title="Verify receipt"><i class="ph-fill ph-eye" style="font-size: 22px;"></i></button>' +
-                        '<button type="button" class="icon-btn js-delete-purchase" data-id="' + p.id + '" title="Delete order"><i class="ph-fill ph-trash" style="font-size: 21px;"></i></button>' +
+                    '<button type="button" class="icon-btn js-open-receipt" data-id="' + p.id + '" title="Verify receipt"><i class="ph-fill ph-eye" style="font-size: 22px;"></i></button>' +
+                    '<button type="button" class="icon-btn js-delete-purchase" data-id="' + p.id + '" title="Delete order"><i class="ph-fill ph-trash" style="font-size: 21px;"></i></button>' +
                     '</div></td>' +
-                '</tr>';
+                    '</tr>';
             }).join('');
         }
 
@@ -318,11 +327,23 @@
         var img = document.getElementById('receiptImage');
         var empty = document.getElementById('receiptEmpty');
         if (item.receipt_url) {
-            img.src = item.receipt_url;
-            img.hidden = false;
             empty.hidden = true;
+            empty.textContent = 'No payment receipt has been uploaded yet.';
+            img.hidden = false;
+            img.alt = 'Payment receipt of ' + item.customer + ' (' + item.order_id + ')';
+            img.onerror = function () {
+                img.onerror = null;
+                img.hidden = true;
+                img.removeAttribute('src');
+                empty.textContent = 'The receipt image could not be loaded.';
+                empty.hidden = false;
+            };
+            img.src = item.receipt_url;
         } else {
+            img.onerror = null;
             img.hidden = true;
+            img.removeAttribute('src');
+            empty.textContent = 'No payment receipt has been uploaded yet.';
             empty.hidden = false;
         }
 
@@ -488,20 +509,20 @@
                 return '<tr' + isLast + '>' +
                     '<td>' + escapeHtml(p.code) + '</td>' +
                     '<td><div class="pkg-name-cell">' +
-                        '<span class="pkg-name-cell__title">' + escapeHtml(p.name) + '</span>' +
-                        '<span class="pkg-name-cell__variant">' + escapeHtml(p.variant) + '</span>' +
+                    '<span class="pkg-name-cell__title">' + escapeHtml(p.name) + '</span>' +
+                    '<span class="pkg-name-cell__variant">' + escapeHtml(p.variant) + '</span>' +
                     '</div></td>' +
                     '<td>' + escapeHtml(p.category) + '</td>' +
                     '<td>' + p.sessions + ' Sessions</td>' +
                     '<td>' + p.validity + ' Days</td>' +
                     '<td class="pkg-price-cell">' + formatRupiah(p.price) + '</td>' +
                     '<td><button type="button" class="status-badge ' + badgeClass + ' js-toggle-status" data-id="' + p.id + '">' +
-                        (p.status === 'active' ? 'Active' : 'Inactive') + '</button></td>' +
+                    (p.status === 'active' ? 'Active' : 'Inactive') + '</button></td>' +
                     '<td><div class="row-actions">' +
-                        '<button type="button" class="icon-btn js-edit" data-id="' + p.id + '" title="Edit variant"><i class="ph-fill ph-pencil-simple" style="font-size: 21px;"></i></button>' +
-                        '<button type="button" class="icon-btn js-delete" data-id="' + p.id + '" title="Delete variant"><i class="ph-fill ph-trash" style="font-size: 21px;"></i></button>' +
+                    '<button type="button" class="icon-btn js-edit" data-id="' + p.id + '" title="Edit variant"><i class="ph-fill ph-pencil-simple" style="font-size: 21px;"></i></button>' +
+                    '<button type="button" class="icon-btn js-delete" data-id="' + p.id + '" title="Delete variant"><i class="ph-fill ph-trash" style="font-size: 21px;"></i></button>' +
                     '</div></td>' +
-                '</tr>';
+                    '</tr>';
             }).join('');
         }
 

@@ -42,7 +42,7 @@
     var avatarWrap = document.querySelector('.profile-card__avatar-wrap');
 
     var ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-    var MAX_BYTES = 2 * 1024 * 1024;
+    var MAX_BYTES = 5 * 1024 * 1024;
     function previewAvatar(file) {
         var holder = document.querySelector('.profile-card__avatar');
         if (!holder) return;
@@ -74,7 +74,7 @@
             }
             if (file.size > MAX_BYTES) {
                 avatarInput.value = '';
-                showAlert('error', 'Image size must be less than 2MB.');
+                showAlert('error', 'Image size must be less than 5MB.');
                 return;
             }
 

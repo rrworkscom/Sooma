@@ -14,7 +14,6 @@ $transactionUrl   = '../customer/profile-transaction.php';
 $bankName         = 'BCA Sooma Wellness';
 $bankAccount      = '5105555005';
 $bankHolder       = 'RR VANESSA VIOLETA';
-$uploadDir        = __DIR__ . '/../uploads/receipts';
 $maxBytes         = 5 * 1024 * 1024;
 $paymentTtl       = 30 * 60;
 
@@ -25,46 +24,126 @@ if (!function_exists('e')) {
     }
 }
 
-function pay_detect_type(string $path): ?string
-{
-    $h = @file_get_contents($path, false, null, 0, 12);
-    if ($h === false || strlen($h) < 4) {
-        return null;
+if (!function_exists('sw_uploaded_image_to_data_uri')) {
+    function sw_uploaded_image_to_data_uri(
+        array $file,
+        int $maxDim = 900,
+        int $quality = 75,
+        int $maxBytes = 5242880
+    ): string {
+        if (!isset($file['error']) || $file['error'] !== UPLOAD_ERR_OK) {
+            throw new RuntimeException('File upload failed or no file was selected.');
+        }
+
+        if (!is_uploaded_file($file['tmp_name'])) {
+            throw new RuntimeException('Invalid uploaded file source.');
+        }
+
+        if (($file['size'] ?? 0) > $maxBytes) {
+            $maxMb = (int) round($maxBytes / (1024 * 1024));
+            throw new RuntimeException("Image size must be less than {$maxMb}MB.");
+        }
+
+        $allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+        if (function_exists('finfo_open')) {
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $mime  = finfo_file($finfo, $file['tmp_name']);
+            finfo_close($finfo);
+        } else {
+            $imgInfo = @getimagesize($file['tmp_name']);
+            $mime    = $imgInfo['mime'] ?? '';
+        }
+
+        if (!in_array($mime, $allowedTypes, true)) {
+            throw new RuntimeException('Only JPG, PNG, or WEBP images are allowed.');
+        }
+
+        $binaryData = file_get_contents($file['tmp_name']);
+        if ($binaryData === false || $binaryData === '') {
+            throw new RuntimeException('Unable to read uploaded image.');
+        }
+
+        if (function_exists('imagecreatefromstring')) {
+            $srcImg = @imagecreatefromstring($binaryData);
+            if ($srcImg !== false) {
+                if ($mime === 'image/jpeg' && function_exists('exif_read_data')) {
+                    $exif = @exif_read_data($file['tmp_name']);
+                    $orientation = (int) ($exif['Orientation'] ?? 1);
+                    if ($orientation === 3) {
+                        $srcImg = imagerotate($srcImg, 180, 0);
+                    } elseif ($orientation === 6) {
+                        $srcImg = imagerotate($srcImg, -90, 0);
+                    } elseif ($orientation === 8) {
+                        $srcImg = imagerotate($srcImg, 90, 0);
+                    }
+                }
+
+                $origW = imagesx($srcImg);
+                $origH = imagesy($srcImg);
+
+                if ($origW > $maxDim || $origH > $maxDim) {
+                    $ratio = min($maxDim / $origW, $maxDim / $origH);
+                    $newW  = max(1, (int) round($origW * $ratio));
+                    $newH  = max(1, (int) round($origH * $ratio));
+                } else {
+                    $newW = $origW;
+                    $newH = $origH;
+                }
+
+                $dstImg = imagecreatetruecolor($newW, $newH);
+                $white = imagecolorallocate($dstImg, 255, 255, 255);
+                imagefilledrectangle($dstImg, 0, 0, $newW, $newH, $white);
+                imagecopyresampled($dstImg, $srcImg, 0, 0, 0, 0, $newW, $newH, $origW, $origH);
+
+                ob_start();
+                imagejpeg($dstImg, null, $quality);
+                $compressed = ob_get_clean();
+
+                imagedestroy($srcImg);
+                imagedestroy($dstImg);
+
+                if ($compressed !== false && $compressed !== '') {
+                    $binaryData = $compressed;
+                    $mime       = 'image/jpeg';
+                }
+            }
+        }
+
+        return 'data:' . $mime . ';base64,' . base64_encode($binaryData);
     }
-    if (strncmp($h, "\xFF\xD8\xFF", 3) === 0) return 'jpg';
-    if (strncmp($h, "\x89PNG", 4) === 0)       return 'png';
-    if (strncmp($h, 'RIFF', 4) === 0 && substr($h, 8, 4) === 'WEBP') return 'webp';
-    if (strncmp($h, '%PDF', 4) === 0)          return 'pdf';
-    return null;
 }
 
-function mb_substr_safe(string $s, int $len): string
-{
-    $s = preg_replace('/[\x00-\x1F\x7F]/', '', $s) ?? '';
-    return function_exists('mb_substr') ? mb_substr($s, 0, $len) : substr($s, 0, $len);
+if (!function_exists('mb_substr_safe')) {
+    function mb_substr_safe(string $s, int $len): string
+    {
+        $s = preg_replace('/[\x00-\x1F\x7F]/', '', $s) ?? '';
+        return function_exists('mb_substr') ? mb_substr($s, 0, $len) : substr($s, 0, $len);
+    }
 }
 
-function pkg_has_status_column(PDO $pdo): bool
-{
-    static $hasStatus = null;
-    if ($hasStatus !== null) {
+if (!function_exists('pkg_has_status_column')) {
+    function pkg_has_status_column(PDO $pdo): bool
+    {
+        static $hasStatus = null;
+        if ($hasStatus !== null) {
+            return $hasStatus;
+        }
+        try {
+            $stmt = $pdo->prepare("
+                SELECT 1
+                  FROM information_schema.columns
+                 WHERE table_schema = 'sooma_wellness'
+                   AND table_name   = 'user_packages'
+                   AND column_name  = 'status'
+                 LIMIT 1
+            ");
+            $stmt->execute();
+            $hasStatus = (bool) $stmt->fetchColumn();
+        } catch (Throwable $ex) {
+            $hasStatus = false;
+        }
         return $hasStatus;
     }
-    try {
-        $stmt = $pdo->prepare("
-            SELECT 1
-              FROM information_schema.columns
-             WHERE table_schema = 'sooma_wellness'
-               AND table_name   = 'user_packages'
-               AND column_name  = 'status'
-             LIMIT 1
-        ");
-        $stmt->execute();
-        $hasStatus = (bool) $stmt->fetchColumn();
-    } catch (Throwable $ex) {
-        $hasStatus = false;
-    }
-    return $hasStatus;
 }
 
 $statusLabels = [
@@ -203,13 +282,19 @@ $status = (string) ($draft['status'] ?? 'waiting');
 if (!empty($draft['payment_id']) && isset($pdo) && $pdo instanceof PDO) {
     try {
         $stmtChk = $pdo->prepare("
-            SELECT verification_status
+            SELECT verification_status, payment_proof
               FROM sooma_wellness.payments
              WHERE payment_id = :pid
              LIMIT 1
         ");
         $stmtChk->execute([':pid' => (int) $draft['payment_id']]);
-        $dbVerifStatus = strtolower((string) ($stmtChk->fetchColumn() ?: ''));
+        $payRow = $stmtChk->fetch(PDO::FETCH_ASSOC) ?: [];
+        $dbVerifStatus = strtolower((string) ($payRow['verification_status'] ?? ''));
+
+        if (!empty($payRow['payment_proof']) && empty($draft['receipt_file'])) {
+            $draft['receipt_file'] = (string) $payRow['payment_proof'];
+            $draft['receipt_orig'] = 'Payment-Receipt-' . ($draft['order_code'] ?? 'PKG') . '.jpg';
+        }
 
         if (in_array($dbVerifStatus, ['verified', 'confirmed', 'approved', 'paid'], true)) {
             $status = 'confirmed';
@@ -217,6 +302,9 @@ if (!empty($draft['payment_id']) && isset($pdo) && $pdo instanceof PDO) {
         } elseif ($dbVerifStatus === 'expired') {
             $status = 'expired';
             $draft['status'] = 'expired';
+        } elseif ($dbVerifStatus === 'waiting_verification' && $status === 'waiting') {
+            $status = 'verifying';
+            $draft['status'] = 'verifying';
         }
     } catch (Throwable $ex) {
         error_log('[packages-payment-sync] ' . $ex->getMessage());
@@ -268,6 +356,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $reply = function (bool $ok, string $message, int $code = 200) use ($wantsJson, &$status, $statusLabels): void {
         if ($wantsJson) {
+            while (ob_get_level() > 0) {
+                ob_end_clean();
+            }
             http_response_code($code);
             header('Content-Type: application/json; charset=utf-8');
             echo json_encode([
@@ -298,63 +389,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'upload_receipt') {
         $f = $_FILES['receipt'] ?? null;
 
-        if (!$f || $f['error'] === UPLOAD_ERR_NO_FILE) {
+        if (!$f || ($f['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
             $reply(false, 'Please choose a payment receipt first.');
         }
-        if ($f['error'] === UPLOAD_ERR_INI_SIZE || $f['error'] === UPLOAD_ERR_FORM_SIZE || $f['size'] > $maxBytes) {
-            $reply(false, 'File is too large. Maximum size is 5 MB.');
-        }
-        if ($f['error'] !== UPLOAD_ERR_OK || !is_uploaded_file($f['tmp_name'])) {
-            $reply(false, 'Upload failed. Please try again.', 500);
-        }
 
-        $ext = pay_detect_type($f['tmp_name']);
-        if ($ext === null) {
-            $reply(false, 'Only JPG, PNG, WEBP or PDF files are allowed.');
+        try {
+            $proofDataUri = sw_uploaded_image_to_data_uri($f, 900, 75, $maxBytes);
+        } catch (RuntimeException $ex) {
+            $reply(false, $ex->getMessage(), 422);
         }
 
-        if (!is_dir($uploadDir) && !@mkdir($uploadDir, 0755, true) && !is_dir($uploadDir)) {
-            $reply(false, 'Server cannot store the file right now.', 500);
+        if (empty($draft['payment_id']) || !isset($pdo) || !($pdo instanceof PDO)) {
+            $reply(false, 'Payment record was not found. Please recreate your package order.', 500);
         }
 
-        $ht = $uploadDir . '/.htaccess';
-        if (!is_file($ht)) {
-            @file_put_contents($ht, "Options -Indexes\n<FilesMatch \"\\.(php|phtml|phar)$\">\n  Require all denied\n</FilesMatch>\n");
+        try {
+            $stmtUpd = $pdo->prepare("
+                UPDATE sooma_wellness.payments
+                   SET payment_proof       = :proof,
+                       verification_status = 'waiting_verification',
+                       uploaded_at         = CURRENT_TIMESTAMP
+                 WHERE payment_id          = :pid
+            ");
+            $stmtUpd->execute([
+                ':proof' => $proofDataUri,
+                ':pid'   => (int) $draft['payment_id'],
+            ]);
+        } catch (Throwable $ex) {
+            error_log('[packages-payment-proof] ' . $ex->getMessage());
+            $reply(false, 'Could not save your receipt: ' . $ex->getMessage(), 500);
         }
 
-        $orderCode = (string) ($draft['order_code'] ?? ('PKG-' . date('YmdHis')));
-        $safeId    = preg_replace('/[^A-Za-z0-9-]/', '', $orderCode);
-        $filename  = sprintf('%s_%d_%s.%s', $safeId, time(), bin2hex(random_bytes(4)), $ext);
-        $target    = $uploadDir . '/' . $filename;
-
-        if (!move_uploaded_file($f['tmp_name'], $target)) {
-            $reply(false, 'Could not save the file. Please try again.', 500);
-        }
-
-        $originalName = mb_substr_safe((string) $f['name'], 120);
-
-        if (!empty($draft['payment_id']) && isset($pdo) && $pdo instanceof PDO) {
-            try {
-                $stmtUpd = $pdo->prepare("
-                    UPDATE sooma_wellness.payments
-                       SET payment_proof       = :proof,
-                           verification_status = 'waiting_verification',
-                           uploaded_at         = CURRENT_TIMESTAMP
-                     WHERE payment_id          = :pid
-                ");
-                $stmtUpd->execute([
-                    ':proof' => $filename,
-                    ':pid'   => (int) $draft['payment_id'],
-                ]);
-            } catch (Throwable $ex) {
-                error_log('[packages-payment-proof] ' . $ex->getMessage());
-                $reply(false, 'Receipt saved, but failed to update database record.', 500);
-            }
+        $orderCode    = (string) ($draft['order_code'] ?? 'PKG');
+        $originalName = mb_substr_safe((string) ($f['name'] ?? ''), 120);
+        if ($originalName === '') {
+            $originalName = 'Payment-Receipt-' . $orderCode . '.jpg';
         }
 
         $status                = 'verifying';
         $draft['status']       = 'verifying';
-        $draft['receipt_file'] = $filename;
+        $draft['receipt_file'] = $proofDataUri;
         $draft['receipt_orig'] = $originalName;
 
         $reply(true, 'Receipt uploaded. Waiting for admin verification before your package becomes active.');
@@ -363,12 +437,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $reply(false, 'Invalid request.', 400);
 }
 
-$total     = (int) ($draft['total_payment'] ?? 0);
-$orderId   = (string) ($draft['order_code'] ?? 'PKG-0001');
-$remaining = $status === 'waiting' ? max(0, (int) $draft['expires_at'] - time()) : 0;
-$canUpload = $status === 'waiting';
-$receipt   = !empty($draft['receipt_file']) ? ['original' => (string) ($draft['receipt_orig'] ?? 'Receipt')] : null;
-$flash     = $_SESSION['pay_flash'] ?? null;
+$total       = (int) ($draft['total_payment'] ?? 0);
+$orderId     = (string) ($draft['order_code'] ?? 'PKG-0001');
+$remaining   = $status === 'waiting' ? max(0, (int) $draft['expires_at'] - time()) : 0;
+$canUpload   = $status === 'waiting';
+$receiptFile = (string) ($draft['receipt_file'] ?? '');
+
+if ($receiptFile !== '') {
+    $receiptLabel = (string) ($draft['receipt_orig'] ?? '');
+    if ($receiptLabel === '') {
+        $receiptLabel = str_starts_with($receiptFile, 'data:image/')
+            ? 'Payment-Receipt-' . $orderId . '.jpg'
+            : basename($receiptFile);
+    }
+    $receipt = ['original' => $receiptLabel];
+} else {
+    $receipt = null;
+}
+
+$flash = $_SESSION['pay_flash'] ?? null;
 unset($_SESSION['pay_flash']);
 
 $backUrl = $purchasePageUrl;
@@ -445,7 +532,7 @@ require __DIR__ . '/../includes/header.php';
                     <input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>">
                     <input type="hidden" name="action" value="upload_receipt">
                     <input type="file" id="pay-receipt" name="receipt" class="pay-file"
-                        accept="image/jpeg,image/png,image/webp,application/pdf,.pdf" <?= $canUpload ? '' : 'disabled' ?>>
+                        accept="image/jpeg,image/png,image/webp" <?= $canUpload ? '' : 'disabled' ?>>
 
                     <label for="pay-receipt" id="pay-upload-btn"
                         class="pay-upload-btn <?= $canUpload ? '' : 'is-disabled' ?>"
